@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A2F45"/>
+      <stop offset="1" stop-color="#1F1A26"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <ellipse cx="128" cy="204" rx="78" ry="10" fill="#000" opacity="0.35"/>
+  <g transform="translate(16 44) scale(14)" shape-rendering="crispEdges">
+    <g fill="#D97757">
+      <rect x="2" y="3" width="12" height="5"/>
+      <rect x="0" y="5" width="2" height="2"/>
+      <rect x="14" y="5" width="2" height="2"/>
+      <rect x="3" y="8" width="1" height="2"/>
+      <rect x="5" y="8" width="1" height="2"/>
+      <rect x="10" y="8" width="1" height="2"/>
+      <rect x="12" y="8" width="1" height="2"/>
+    </g>
+    <g fill="#F2C14E">
+      <rect x="6" y="2" width="4" height="1"/>
+      <rect x="6" y="1" width="1" height="1"/>
+      <rect x="7.5" y="0.5" width="1" height="1.5"/>
+      <rect x="9" y="1" width="1" height="1"/>
+    </g>
+    <rect x="7.75" y="0.75" width="0.5" height="0.5" fill="#FF7A8A"/>
+    <g fill="#1F1E1D">
+      <rect x="5" y="4" width="1" height="2"/>
+      <rect x="10" y="4" width="1" height="2"/>
+    </g>
+  </g>
+</svg>

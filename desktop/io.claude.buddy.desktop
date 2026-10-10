@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Buddy
+GenericName=Claude Code (root)
+Comment=Buka Claude Code sebagai root bersama Claude Buddy
+Exec=/usr/local/bin/claude-buddy-launch
+Icon=claude-buddy
+Terminal=false
+Categories=Development;
+Keywords=claude;buddy;sudo;root;ai;
+StartupNotify=false

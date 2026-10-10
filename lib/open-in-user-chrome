@@ -1,0 +1,12 @@
+#!/bin/bash
+# Dipanggil (sebagai root) oleh `claude auth login` untuk membuka URL login.
+# Membuka URL di Chrome milik user desktop, bukan sebagai root.
+url="$1"
+user="${CLAUDE_BUDDY_USER:-yandi}"
+uid="$(id -u "$user")"
+exec runuser -u "$user" -- env \
+    XDG_RUNTIME_DIR="/run/user/$uid" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+    DISPLAY="${DISPLAY:-:0}" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+    google-chrome --new-window "$url" >/dev/null 2>&1 &

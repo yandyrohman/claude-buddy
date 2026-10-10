@@ -1,0 +1,11 @@
+# Jangan sampai kredensial ikut ter-commit
+.credentials.json
+.claude.json
+status.json
+debug.json
+
+*.bak
+*-backup.js
+*.tmp
+.vscode/
+.idea/

@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Kumpulkan status Claude Code (akun + sisa limit) untuk Claude Buddy.
+
+Berjalan sebagai root lewat claude-buddy-status.service. Token OAuth hanya
+dibaca di sini dan TIDAK ditulis ke file output; output hanya berisi info akun
+dan persentase pemakaian, di /run/claude-buddy/status.json (bisa dibaca user).
+"""
+
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+
+OUT_DIR = '/run/claude-buddy'
+OUT_FILE = os.path.join(OUT_DIR, 'status.json')
+HOMES = [('root', '/root'), ('yandi', '/home/yandi')]
+USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def account_info(home):
+    cfg = load_json(os.path.join(home, '.claude.json')) or {}
+    acc = cfg.get('oauthAccount') or {}
+    creds = (load_json(os.path.join(home, '.claude', '.credentials.json')) or {}).get('claudeAiOauth') or {}
+    if not acc and not creds:
+        return None, None
+    info = {
+        'email': acc.get('emailAddress'),
+        'name': acc.get('displayName') or acc.get('fullName'),
+        'organization': acc.get('organizationName'),
+        'plan': creds.get('subscriptionType'),
+        'token_expires_at': (creds.get('expiresAt') or 0) / 1000 or None,
+    }
+    return info, creds.get('accessToken')
+
+
+def fetch_usage(token):
+    req = urllib.request.Request(USAGE_URL, headers={
+        'Authorization': f'Bearer {token}',
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'claude-buddy-status/1.0',
+    })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.load(r)
+
+    def part(key):
+        v = data.get(key) or {}
+        if v.get('utilization') is None:
+            return None
+        return {'percent': v['utilization'], 'resets_at': v.get('resets_at')}
+
+    return {
+        'session': part('five_hour'),
+        'weekly': part('seven_day'),
+        'weekly_opus': part('seven_day_opus'),
+        'weekly_sonnet': part('seven_day_sonnet'),
+    }
+
+
+def main():
+    status = {'updated_at': time.time(), 'accounts': {}, 'usage': None, 'error': None}
+    tokens = []
+    for user, home in HOMES:
+        info, token = account_info(home)
+        if info:
+            status['accounts'][user] = info
+        if token:
+            tokens.append((user, token))
+
+    errors = []
+    for user, token in tokens:
+        try:
+            status['usage'] = fetch_usage(token)
+            status['usage_source'] = user
+            break
+        except urllib.error.HTTPError as e:
+            errors.append(f'{user}: HTTP {e.code}')
+        except Exception as e:  # noqa: BLE001 - laporkan apa pun ke maskot
+            errors.append(f'{user}: {type(e).__name__}')
+    if status['usage'] is None:
+        status['error'] = '; '.join(errors) or 'Belum login ke Claude Code'
+
+    os.makedirs(OUT_DIR, mode=0o755, exist_ok=True)
+    tmp = OUT_FILE + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(status, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, OUT_FILE)
+
+
+if __name__ == '__main__':
+    main()

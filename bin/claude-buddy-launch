@@ -1,0 +1,14 @@
+#!/bin/bash
+# Dipanggil oleh aplikasi "Claude Buddy" (dijalankan sebagai user desktop).
+# - Kalau maskot sedang mati / sedang pamit: nyalakan lagi.
+# - Kalau sedang hidup: buka Claude Code (root) di terminal.
+UUID="claude-buddy@yandi"
+FLAG="${XDG_CACHE_HOME:-$HOME/.cache}/claude-buddy-was-off"
+state="$(gnome-extensions info "$UUID" 2>/dev/null | sed -n 's/^ *State: //p')"
+if [ -e "$FLAG" ] || [ "$state" != "ACTIVE" ]; then
+    # kalau masih dalam animasi pamit, matikan dulu lalu nyalakan lagi
+    [ "$state" = "ACTIVE" ] && gnome-extensions disable "$UUID"
+    gnome-extensions enable "$UUID"
+    exit 0
+fi
+exec ptyxis --new-window --title="Claude Buddy" -x /usr/local/bin/claude-sudo

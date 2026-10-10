@@ -1,0 +1,25 @@
+#!/bin/bash
+# Ganti akun Claude Code (versi root yang dipakai Claude Buddy).
+# Halaman login dibuka di Chrome milik user, lalu status Claude Buddy diperbarui.
+
+echo "🔁 Ganti akun Claude Code (Claude Buddy)"
+echo "   Halaman login akan terbuka di Chrome."
+echo "   Kalau perlu, pilih / login akun lain dulu di claude.ai."
+echo
+
+sudo env \
+    HOME=/root \
+    PATH="/usr/local/lib/claude-buddy/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" \
+    BROWSER=/usr/local/lib/claude-buddy/open-in-user-chrome \
+    CLAUDE_BUDDY_USER="$USER" \
+    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" DISPLAY="$DISPLAY" \
+    bash -c '/root/.local/bin/claude auth login; rc=$?; systemctl start claude-buddy-status.service; echo; /root/.local/bin/claude auth status --text; exit $rc'
+status=$?
+
+echo
+if [ "$status" -eq 0 ]; then
+    echo "✅ Selesai! Akun Claude Buddy sudah diperbarui."
+else
+    echo "⚠️  Login tidak selesai (kode $status)."
+fi
+read -rp "Tekan Enter untuk menutup..."
