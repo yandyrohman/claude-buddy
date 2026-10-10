@@ -51,6 +51,8 @@ const C = {
     gem: '#FF7A8A',
     blush: 'rgba(255, 140, 140, 0.7)',
     angry: 'rgba(255, 70, 70, 0.75)',
+    ink: '#2b2230', // garis gelembung (lihat stylesheet.css)
+    paper: '#fff8ee',
 };
 
 const M = Clutter.AnimationMode;
@@ -183,15 +185,70 @@ function relativeTime(iso) {
     return `dalam ${Math.max(1, m)} menit`;
 }
 
-function px(parent, x, y, w, h, color, extraStyle = '') {
-    const r = new St.Widget({
-        style: `background-color: ${color}; ${extraStyle}`,
-        width: Math.round(w * U),
-        height: Math.round(h * U),
+// Kotak piksel tidak digambar sebagai St.Widget berwarna (tepinya bergerigi saat
+// maskot miring), tapi ke tekstur Cairo dengan tepi transparan AA_PAD px. Tekstur
+// difilter linear oleh Clutter, jadi tepi diagonal tetap halus (anti-aliasing).
+const AA_PAD = 2;
+
+function parseColor(s) {
+    let m = s.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    if (m)
+        return [...m.slice(1).map(h => parseInt(h, 16) / 255), 1];
+    m = s.match(/^rgba?\(([^)]+)\)$/);
+    if (m) {
+        const [r, g, b, a = 1] = m[1].split(',').map(Number);
+        return [r / 255, g / 255, b / 255, a];
+    }
+    return [1, 0, 1, 1];
+}
+
+// Satu lapisan berisi beberapa kotak (dalam satuan U, relatif ke lapisan).
+// rects: [x, y, w, h, warna, sudut°?]; kotak boleh keluar dari ukuran lapisan.
+// Kotak yang bersebelahan dalam satu sprite menyatu tanpa garis sambungan.
+function sprite(parent, x, y, w, h, rects) {
+    const g = group(parent, x, y, w, h);
+    const box = r => [Math.round(r[0] * U), Math.round(r[1] * U), Math.round(r[2] * U), Math.round(r[3] * U)];
+    const all = rects.map(box);
+    const x0 = Math.min(0, ...all.map(b => b[0]));
+    const y0 = Math.min(0, ...all.map(b => b[1]));
+    const x1 = Math.max(g.width, ...all.map(b => b[0] + b[2]));
+    const y1 = Math.max(g.height, ...all.map(b => b[1] + b[3]));
+
+    const area = new St.DrawingArea({
+        width: x1 - x0 + 2 * AA_PAD,
+        height: y1 - y0 + 2 * AA_PAD,
     });
-    r.set_position(Math.round(x * U), Math.round(y * U));
-    parent.add_child(r);
-    return r;
+    area.set_position(x0 - AA_PAD, y0 - AA_PAD);
+    area.connect('repaint', () => {
+        const cr = area.get_context();
+        cr.translate(AA_PAD - x0, AA_PAD - y0);
+        for (const r of rects) {
+            const [bx, by, bw, bh] = box(r);
+            cr.save();
+            cr.setSourceRGBA(...parseColor(r[4]));
+            if (r[5]) {
+                cr.translate(bx + bw / 2, by + bh / 2);
+                cr.rotate(r[5] * Math.PI / 180);
+                cr.rectangle(-bw / 2, -bh / 2, bw, bh);
+            } else {
+                cr.rectangle(bx, by, bw, bh);
+            }
+            cr.fill();
+            cr.restore();
+        }
+        cr.$dispose();
+    });
+    g.add_child(area);
+    g.setColor = color => {
+        for (const r of rects)
+            r[4] = color;
+        area.queue_repaint();
+    };
+    return g;
+}
+
+function px(parent, x, y, w, h, color) {
+    return sprite(parent, x, y, w, h, [[0, 0, w, h, color]]);
 }
 
 function group(parent, x, y, w, h) {
@@ -602,107 +659,100 @@ export class Buddy {
         this._addBlur(dropShadow, 14);
         p.dropShadow = dropShadow;
 
+        // Kaki & lengan sedikit menyelip di bawah badan, supaya saat miring tidak
+        // tampak garis sambungan di antara kotak.
         p.legs = [3, 5, 10, 12].map(x => {
-            const leg = px(ch, x, 8, 1, 2, C.body);
+            const leg = sprite(ch, x, 8, 1, 2, [[0, -0.2, 1, 2.2, C.body]]);
             leg.set_pivot_point(0.5, 0);
             return leg;
         });
 
-        p.armL = group(ch, 0, 5, 2, 2);
-        px(p.armL, 0, 0, 2, 2, C.body);
+        p.armL = sprite(ch, 0, 5, 2, 2, [[0, 0, 2.2, 2, C.body]]);
         p.armL.set_pivot_point(1.0, 0.5);
 
-        p.armR = group(ch, 14, 5, 2, 2);
-        px(p.armR, 0, 0, 2, 2, C.body);
+        p.armR = sprite(ch, 14, 5, 2, 2, [[-0.2, 0, 2.2, 2, C.body]]);
         p.armR.set_pivot_point(0.0, 0.5);
 
         px(ch, 2, 3, 12, 5, C.body);
 
-        p.crown = group(ch, 6, 0.5, 4, 2.5);
-        px(p.crown, 0, 1.5, 4, 1, C.gold);
-        px(p.crown, 0, 0.5, 1, 1, C.gold);
-        px(p.crown, 1.5, 0, 1, 1.5, C.gold);
-        px(p.crown, 3, 0.5, 1, 1, C.gold);
-        px(p.crown, 1.75, 0.25, 0.5, 0.5, C.gem);
+        p.crown = sprite(ch, 6, 0.5, 4, 2.5, [
+            [0, 1.5, 4, 1, C.gold],
+            [0, 0.5, 1, 1, C.gold],
+            [1.5, 0, 1, 1.5, C.gold],
+            [3, 0.5, 1, 1, C.gold],
+            [1.75, 0.25, 0.5, 0.5, C.gem],
+        ]);
         p.crown.set_pivot_point(0.5, 0.6);
 
         // --- wajah ---
         p.faces = {};
 
         // normal
-        p.eyes = group(ch, 4, 3.5, 8, 3);
-        px(p.eyes, 1, 0.5, 1, 2, C.eye);
-        px(p.eyes, 6, 0.5, 1, 2, C.eye);
+        p.eyes = sprite(ch, 4, 3.5, 8, 3, [
+            [1, 0.5, 1, 2, C.eye],
+            [6, 0.5, 1, 2, C.eye],
+        ]);
         p.eyes.set_pivot_point(0.5, 0.5);
         p.faces.normal = p.eyes;
 
         // senang ^ ^
-        const happy = group(ch, 3, 3.5, 10, 3.5);
-        for (const ox of [1.5, 6.5]) {
-            px(happy, ox, 1.5, 0.5, 0.5, C.eye);
-            px(happy, ox + 0.5, 1, 1, 0.5, C.eye);
-            px(happy, ox + 1.5, 1.5, 0.5, 0.5, C.eye);
-        }
-        px(happy, 0.5, 2.5, 1, 0.5, C.blush);
-        px(happy, 8.5, 2.5, 1, 0.5, C.blush);
-        p.faces.happy = happy;
+        p.faces.happy = sprite(ch, 3, 3.5, 10, 3.5, [
+            ...[1.5, 6.5].flatMap(ox => [
+                [ox, 1.5, 0.5, 0.5, C.eye],
+                [ox + 0.5, 1, 1, 0.5, C.eye],
+                [ox + 1.5, 1.5, 0.5, 0.5, C.eye],
+            ]),
+            [0.5, 2.5, 1, 0.5, C.blush],
+            [8.5, 2.5, 1, 0.5, C.blush],
+        ]);
 
         // diangkat > <
-        const dizzy = group(ch, 3, 3.5, 10, 3.5);
-        px(dizzy, 1.75, 0.5, 0.5, 0.5, C.eye);
-        px(dizzy, 2.25, 1, 0.5, 0.5, C.eye);
-        px(dizzy, 1.75, 1.5, 0.5, 0.5, C.eye);
-        px(dizzy, 7.75, 0.5, 0.5, 0.5, C.eye);
-        px(dizzy, 7.25, 1, 0.5, 0.5, C.eye);
-        px(dizzy, 7.75, 1.5, 0.5, 0.5, C.eye);
-        px(dizzy, 4.5, 2.25, 1, 1, C.eye);
-        px(dizzy, 0.5, 2.5, 1, 0.5, C.blush);
-        px(dizzy, 8.5, 2.5, 1, 0.5, C.blush);
-        p.faces.dizzy = dizzy;
+        p.faces.dizzy = sprite(ch, 3, 3.5, 10, 3.5, [
+            [1.75, 0.5, 0.5, 0.5, C.eye],
+            [2.25, 1, 0.5, 0.5, C.eye],
+            [1.75, 1.5, 0.5, 0.5, C.eye],
+            [7.75, 0.5, 0.5, 0.5, C.eye],
+            [7.25, 1, 0.5, 0.5, C.eye],
+            [7.75, 1.5, 0.5, 0.5, C.eye],
+            [4.5, 2.25, 1, 1, C.eye],
+            [0.5, 2.5, 1, 0.5, C.blush],
+            [8.5, 2.5, 1, 0.5, C.blush],
+        ]);
 
         // tidur
-        const sleepy = group(ch, 4, 3.5, 8, 3);
-        px(sleepy, 0.75, 1.5, 1.5, 0.5, C.eye);
-        px(sleepy, 5.75, 1.5, 1.5, 0.5, C.eye);
-        p.faces.sleepy = sleepy;
+        p.faces.sleepy = sprite(ch, 4, 3.5, 8, 3, [
+            [0.75, 1.5, 1.5, 0.5, C.eye],
+            [5.75, 1.5, 1.5, 0.5, C.eye],
+        ]);
 
         // marah: alis menukik, mulut datar, pipi merah
-        const angry = group(ch, 3, 2.5, 10, 4.5);
-        px(angry, 2, 2, 1, 1, C.eye);
-        px(angry, 7, 2, 1, 1, C.eye);
-        const browL = px(angry, 1.4, 1.0, 1.9, 0.45, C.eye);
-        const browR = px(angry, 6.7, 1.0, 1.9, 0.45, C.eye);
-        browL.set_pivot_point(0.5, 0.5);
-        browR.set_pivot_point(0.5, 0.5);
-        browL.rotation_angle_z = 25;
-        browR.rotation_angle_z = -25;
-        px(angry, 4, 3.3, 2, 0.4, C.eye);
-        px(angry, 0.4, 3, 1.2, 0.5, C.angry);
-        px(angry, 8.4, 3, 1.2, 0.5, C.angry);
-        p.faces.angry = angry;
+        p.faces.angry = sprite(ch, 3, 2.5, 10, 4.5, [
+            [2, 2, 1, 1, C.eye],
+            [7, 2, 1, 1, C.eye],
+            [1.4, 1.0, 1.9, 0.45, C.eye, 25],
+            [6.7, 1.0, 1.9, 0.45, C.eye, -25],
+            [4, 3.3, 2, 0.4, C.eye],
+            [0.4, 3, 1.2, 0.5, C.angry],
+            [8.4, 3, 1.2, 0.5, C.angry],
+        ]);
 
         // sedih: alis turun, mulut cemberut
-        const sad = group(ch, 3, 2.5, 10, 4.5);
-        px(sad, 2, 2.4, 1, 1, C.eye);
-        px(sad, 7, 2.4, 1, 1, C.eye);
-        const sbL = px(sad, 1.4, 1.5, 1.8, 0.4, C.eye);
-        const sbR = px(sad, 6.8, 1.5, 1.8, 0.4, C.eye);
-        sbL.set_pivot_point(0.5, 0.5);
-        sbR.set_pivot_point(0.5, 0.5);
-        sbL.rotation_angle_z = -20;
-        sbR.rotation_angle_z = 20;
-        px(sad, 4, 3.8, 0.5, 0.4, C.eye);
-        px(sad, 4.5, 3.5, 1, 0.4, C.eye);
-        px(sad, 5.5, 3.8, 0.5, 0.4, C.eye);
-        p.faces.sad = sad;
+        p.faces.sad = sprite(ch, 3, 2.5, 10, 4.5, [
+            [2, 2.4, 1, 1, C.eye],
+            [7, 2.4, 1, 1, C.eye],
+            [1.4, 1.5, 1.8, 0.4, C.eye, -20],
+            [6.8, 1.5, 1.8, 0.4, C.eye, 20],
+            [4, 3.8, 0.5, 0.4, C.eye],
+            [4.5, 3.5, 1, 0.4, C.eye],
+            [5.5, 3.8, 0.5, 0.4, C.eye],
+        ]);
 
         // tidak jelas: mata beda ukuran, mulut bergelombang
-        const weird = group(ch, 3, 2.5, 10, 4.5);
-        px(weird, 1.6, 1.3, 1.6, 1.6, C.eye);
-        px(weird, 7.2, 2.1, 0.6, 0.6, C.eye);
-        for (let i = 0; i < 5; i++)
-            px(weird, 3.6 + i * 0.55, i % 2 ? 3.1 : 3.4, 0.55, 0.4, C.eye);
-        p.faces.weird = weird;
+        p.faces.weird = sprite(ch, 3, 2.5, 10, 4.5, [
+            [1.6, 1.3, 1.6, 1.6, C.eye],
+            [7.2, 2.1, 0.6, 0.6, C.eye],
+            ...[0, 1, 2, 3, 4].map(i => [3.6 + i * 0.55, i % 2 ? 3.1 : 3.4, 0.55, 0.4, C.eye]),
+        ]);
 
         // mulut "o" (meniup, kaget)
         p.mouth = px(ch, 7.5, 6, 1, 1, C.eye);
@@ -715,19 +765,18 @@ export class Buddy {
 
         // --- gelembung kata-kata (gaya komik-piksel) ---
         const bubble = new St.Widget({opacity: 0, visible: false});
-        const tailOuter = new St.Widget({style_class: 'claude-buddy-tail-outer', width: 14, height: 14});
+        // Ekor = kotak diputar 45°, digambar halus lewat sprite (ukuran dalam piksel)
+        const tailOuter = sprite(bubble, 0, 0, 14 / U, 14 / U, [[0, 0, 14 / U, 14 / U, C.ink]]);
         const box = new St.Bin({style_class: 'claude-buddy-bubble'});
         const text = new St.Label({style_class: 'claude-buddy-bubble-text'});
         text.clutter_text.line_wrap = true;
         box.set_child(text);
-        const tailInner = new St.Widget({style_class: 'claude-buddy-tail-inner', width: 10, height: 10});
+        const tailInner = sprite(bubble, 0, 0, 10 / U, 10 / U, [[0, 0, 10 / U, 10 / U, C.paper]]);
         for (const t of [tailOuter, tailInner]) {
             t.set_pivot_point(0.5, 0.5);
             t.rotation_angle_z = 45;
         }
-        bubble.add_child(tailOuter);
-        bubble.add_child(box);
-        bubble.add_child(tailInner);
+        bubble.insert_child_above(box, tailOuter);
         this._actor.add_child(bubble);
         p.bubble = {root: bubble, box, text, tailOuter, tailInner};
 
@@ -753,23 +802,60 @@ export class Buddy {
 
     // --- area layar --------------------------------------------------------
 
-    _workArea() {
-        const i = Main.layoutManager.primaryIndex;
-        return Main.layoutManager.getWorkAreaForMonitor(i);
+    // Maskot boleh tinggal di monitor mana saja. Batas gerak mengikuti monitor
+    // tempat dia berada; saat diseret, monitor tujuan (bisa pindah monitor).
+
+    _monitorAt(x, y) {
+        // Monitor yang memuat titik tengah maskot di (x, y), atau yang terdekat
+        const lm = Main.layoutManager;
+        const cx = x + CHAR_W / 2, cy = y + ACTOR_H / 2;
+        let best = lm.primaryMonitor, bestD = Infinity;
+        for (const m of lm.monitors) {
+            const dx = Math.max(m.x - cx, 0, cx - (m.x + m.width));
+            const dy = Math.max(m.y - cy, 0, cy - (m.y + m.height));
+            if (dx * dx + dy * dy < bestD) {
+                best = m;
+                bestD = dx * dx + dy * dy;
+            }
+        }
+        return best;
     }
 
-    _panelBottom() {
-        const m = Main.layoutManager.primaryMonitor;
+    _monitor() {
+        const [x, y] = this._actor.get_position();
+        return this._monitorAt(x, y);
+    }
+
+    _hasNeighbor(side, m = this._monitor()) {
+        // Ada monitor lain yang menempel di sisi kiri (-1) / kanan (1)?
+        return Main.layoutManager.monitors.some(o => o !== m &&
+            (side < 0 ? o.x + o.width === m.x : o.x === m.x + m.width) &&
+            o.y < m.y + m.height && m.y < o.y + o.height);
+    }
+
+    _wallSide() {
+        // Sisi acak untuk adegan dinding; hindari sisi yang bersambung ke monitor lain
+        const side = chance(2) ? -1 : 1;
+        return this._hasNeighbor(side) && !this._hasNeighbor(-side) ? -side : side;
+    }
+
+    _workArea(m = this._monitor()) {
+        return Main.layoutManager.getWorkAreaForMonitor(m.index);
+    }
+
+    _panelBottom(m = this._monitor()) {
+        // Panel atas hanya ada di monitor utama
+        if (m !== Main.layoutManager.primaryMonitor)
+            return m.y;
         return m.y + (Main.layoutManager.panelBox?.height ?? 32);
     }
 
-    _bounds() {
-        // Batas posisi aktor: bebas di monitor utama, asal tetap terlihat
-        const m = Main.layoutManager.primaryMonitor;
+    _bounds(m = this._monitor()) {
+        // Batas posisi aktor: bebas di dalam monitor, asal tetap terlihat
         return {
             minX: m.x,
             maxX: m.x + m.width - CHAR_W,
-            minY: this._panelBottom() - Math.round(2.6 * U),
+            minY: this._panelBottom(m) - Math.round(2.6 * U),
             maxY: m.y + m.height - ACTOR_H,
         };
     }
@@ -790,7 +876,7 @@ export class Buddy {
     }
 
     _moveTo(x, y) {
-        const b = this._bounds();
+        const b = this._bounds(this._monitorAt(x, y));
         this._actor.set_position(
             Math.round(clamp(x, b.minX, b.maxX)),
             Math.round(clamp(y, b.minY, b.maxY)));
@@ -1806,13 +1892,13 @@ export class Buddy {
     _edgeTrip() {
         // Interaksi dengan layar, dipilih berbobot
         const options = [
-            [3, () => this._climbWall(chance(2) ? -1 : 1)],
+            [3, () => this._climbWall(this._wallSide())],
             [3, () => this._goHangTop()],
             [2, () => this._peekBottom()],
-            [2, () => this._peekSide(chance(2) ? -1 : 1)],
+            [2, () => this._peekSide(this._wallSide())],
             [3, () => this._sitOnWindow()],
             [1, () => this._glassPress()],
-            [1, () => this._goWall(chance(2) ? -1 : 1)],
+            [1, () => this._goWall(this._wallSide())],
             [2, () => this._goBottom()],
         ];
         const total = options.reduce((s, [w]) => s + w, 0);
@@ -1917,7 +2003,7 @@ export class Buddy {
     }
 
     _peekBottom() {
-        const m = Main.layoutManager.primaryMonitor;
+        const m = this._monitor();
         const b = this._bounds();
         // hindari tengah bawah (dock)
         const x = chance(2)
@@ -1967,7 +2053,7 @@ export class Buddy {
     }
 
     _peekSide(side) {
-        const m = Main.layoutManager.primaryMonitor;
+        const m = this._monitor();
         const b = this._bounds();
         const wa = this._workArea();
         const [, cy] = this._actor.get_position();
@@ -2130,9 +2216,9 @@ export class Buddy {
         const b = this._bounds();
         const [x, y] = this._actor.get_position();
         const near = 1.5 * U;
-        if (x - b.minX < near)
+        if (x - b.minX < near && !this._hasNeighbor(-1))
             this._edgeWall(-1);
-        else if (b.maxX - x < near)
+        else if (b.maxX - x < near && !this._hasNeighbor(1))
             this._edgeWall(1);
         else if (b.maxY - y < near)
             this._edgeBottom();
@@ -3130,14 +3216,14 @@ export class Buddy {
             p.armL.ease({rotation_angle_z: n % 2 ? 30 : 10, duration: 150});
             p.armR.ease({rotation_angle_z: n % 2 ? -10 : -30, duration: 150});
             for (const cell of cells)
-                cell.style = `background-color: ${pick(colors)};`;
+                cell.setColor(pick(colors));
             if (n < 16) {
                 this._later(180, twist);
                 return;
             }
             const win = pick(colors);
             for (const cell of cells)
-                cell.style = `background-color: ${win};`;
+                cell.setColor(win);
             cube.ease({rotation_angle_z: 0, scale_x: 1.2, scale_y: 1.2, duration: 200, mode: M.EASE_OUT_BACK});
             this._setFace('happy');
             this._say(pick(['Selesai! Rekor baru! 🏆', 'Gampang~ 😎🧩']));
@@ -3220,7 +3306,7 @@ export class Buddy {
         const below = ay - boxH - 30 < this._panelBottom();
         const by = below ? ACTOR_H + 16 : -boxH - 18;
         // Jangan terpotong di tepi kiri/kanan layar
-        const m = Main.layoutManager.primaryMonitor;
+        const m = this._monitor();
         const gx = clamp(ax + cx - boxW / 2, m.x + 8, m.x + m.width - boxW - 8);
         const bx = Math.round(gx - ax);
         const tailX = clamp(cx, bx + 16, bx + boxW - 16);
