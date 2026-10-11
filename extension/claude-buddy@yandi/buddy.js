@@ -1,7 +1,9 @@
 // Claude Buddy: maskot Clawd bermahkota yang hidup di desktop.
 //
 // Lapisan aktor (luar ke dalam):
-//   actor   – posisi di layar (dianimasikan saat lari), hover/klik/drag
+//   actor   – posisi di layar (dianimasikan saat lari), hover/klik/drag; berisi
+//             badan + gelembung kata-kata
+//   body    – diperbesar saat hover (gelembung tidak ikut, supaya teksnya tetap tajam)
 //   float   – mengambang naik-turun + goyang pelan (loop idle); tempat properti adegan
 //   bounce  – lompat, salto, mendarat, miring, berayun saat bergelantungan
 //   char    – "bernapas", berisi bagian-bagian badan (kotak piksel)
@@ -11,6 +13,7 @@
 // menyusun ulang aktor jendela setelah sinyal `restacked`, jadi urutan dicek ulang
 // lewat Meta.later (BEFORE_REDRAW) + pengecekan berkala.
 
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GioUnix from 'gi://GioUnix';
@@ -42,7 +45,7 @@ const CHAR_H = 11 * U;
 const ACTOR_H = CHAR_H + U;
 const DRAG_THRESHOLD = 6;
 const BUBBLE_MAX_W = 250;
-const TYPE_SPEED = 26; // ms per huruf
+const TYPE_SPEED = 22; // ms per huruf
 
 const C = {
     body: '#D97757',
@@ -53,6 +56,35 @@ const C = {
     angry: 'rgba(255, 70, 70, 0.75)',
     ink: '#2b2230', // garis gelembung (lihat stylesheet.css)
     paper: '#fff8ee',
+};
+
+// Gaya mainan, digambar lewat shape() (lihat di bawah)
+const TOY = {
+    ball: {gradient: ['#ffffff', '#ff6b6b'], stroke: C.ink, line: 3, ellipse: true},
+    yoyo: {fill: '#5aa9ff', stroke: C.ink, line: 3, ellipse: true},
+    soap: {fill: 'rgba(170, 225, 255, 0.25)', stroke: 'rgba(255, 255, 255, 0.85)', line: 2, ellipse: true},
+    laptopScreen: {fill: C.ink, stroke: '#9aa0aa', line: 2, radius: 4},
+    laptopBase: {fill: '#c9ced6', radius: 3},
+    guitarBody: {fill: '#c9783e', stroke: C.ink, line: 2, radius: 1.4 * U},
+    guitarHole: {fill: '#3a2416', ellipse: true},
+    guitarNeck: {fill: '#6b4226', stroke: C.ink, line: 1},
+    mug: {fill: '#ffffff', stroke: C.ink, line: 2, radius: [2, 2, 7, 7]},
+    coffee: {fill: '#6b4226'},
+    mugHandle: {stroke: C.ink, line: 3, radius: 6},
+    rope: {stroke: 'rgba(255, 255, 255, 0.9)', line: 3, radius: 6 * U},
+    balloon: {fill: '#ff5a6e', stroke: C.ink, line: 2, ellipse: true},
+    shine: {fill: 'rgba(255, 255, 255, 0.6)', ellipse: true},
+    skate: {fill: '#8b5a3c', stroke: C.ink, line: 2, radius: 6},
+    wheel: {fill: C.ink, stroke: '#c9ced6', line: 2, ellipse: true},
+    bookCover: {fill: '#3a6ea5', stroke: C.ink, line: 2, radius: 4},
+    page: {fill: C.paper, stroke: 'rgba(43, 34, 48, 0.5)', line: 1},
+    wand: {fill: C.ink, radius: 3},
+    rubik: {fill: '#1f1e1d', radius: 5},
+    phone: {fill: C.ink, stroke: '#9aa0aa', line: 2, radius: 6},
+    flash: {fill: 'rgba(255, 255, 255, 0.95)', radius: 20},
+    tear: {fill: '#7fc8ff', radius: [6, 6, 8, 8]},
+    whip: {fill: '#6b4226', radius: 6, shadow: true},
+    string: {fill: 'rgba(255, 255, 255, 0.85)'},
 };
 
 const M = Clutter.AnimationMode;
@@ -185,10 +217,13 @@ function relativeTime(iso) {
     return `dalam ${Math.max(1, m)} menit`;
 }
 
-// Kotak piksel tidak digambar sebagai St.Widget berwarna (tepinya bergerigi saat
-// maskot miring), tapi ke tekstur Cairo dengan tepi transparan AA_PAD px. Tekstur
-// difilter linear oleh Clutter, jadi tepi diagonal tetap halus (anti-aliasing).
+// Badan & mainan tidak digambar sebagai St.Widget ber-CSS (tepinya bergerigi saat
+// miring, dan sudut membulatnya "pecah" jadi beberapa potongan saat diperbesar),
+// tapi ke tekstur Cairo dengan tepi transparan AA_PAD px. Tekstur dirender SS kali
+// lebih besar lalu diperkecil dengan filter trilinear, jadi tetap tajam saat maskot
+// membesar (hover) dan tepinya halus saat miring (anti-aliasing).
 const AA_PAD = 2;
+const SS = 2;
 
 function parseColor(s) {
     let m = s.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
@@ -200,6 +235,28 @@ function parseColor(s) {
         return [r / 255, g / 255, b / 255, a];
     }
     return [1, 0, 1, 1];
+}
+
+// Kanvas Cairo di dalam `holder` yang menutupi kotak (x0, y0)–(x1, y1) piksel;
+// draw(cr) menggambar dalam koordinat piksel holder.
+function paintArea(holder, x0, y0, x1, y1, draw) {
+    const area = new St.DrawingArea({
+        width: Math.ceil(x1 - x0 + 2 * AA_PAD) * SS,
+        height: Math.ceil(y1 - y0 + 2 * AA_PAD) * SS,
+        scale_x: 1 / SS,
+        scale_y: 1 / SS,
+    });
+    area.set_content_scaling_filters(Clutter.ScalingFilter.TRILINEAR, Clutter.ScalingFilter.LINEAR);
+    area.set_position(x0 - AA_PAD, y0 - AA_PAD);
+    area.connect('repaint', () => {
+        const cr = area.get_context();
+        cr.scale(SS, SS);
+        cr.translate(AA_PAD - x0, AA_PAD - y0);
+        draw(cr);
+        cr.$dispose();
+    });
+    holder.add_child(area);
+    return area;
 }
 
 // Satu lapisan berisi beberapa kotak (dalam satuan U, relatif ke lapisan).
@@ -214,14 +271,7 @@ function sprite(parent, x, y, w, h, rects) {
     const x1 = Math.max(g.width, ...all.map(b => b[0] + b[2]));
     const y1 = Math.max(g.height, ...all.map(b => b[1] + b[3]));
 
-    const area = new St.DrawingArea({
-        width: x1 - x0 + 2 * AA_PAD,
-        height: y1 - y0 + 2 * AA_PAD,
-    });
-    area.set_position(x0 - AA_PAD, y0 - AA_PAD);
-    area.connect('repaint', () => {
-        const cr = area.get_context();
-        cr.translate(AA_PAD - x0, AA_PAD - y0);
+    const area = paintArea(g, x0, y0, x1, y1, cr => {
         for (const r of rects) {
             const [bx, by, bw, bh] = box(r);
             cr.save();
@@ -236,14 +286,77 @@ function sprite(parent, x, y, w, h, rects) {
             cr.fill();
             cr.restore();
         }
-        cr.$dispose();
     });
-    g.add_child(area);
     g.setColor = color => {
         for (const r of rects)
             r[4] = color;
         area.queue_repaint();
     };
+    return g;
+}
+
+function roundRectPath(cr, w, h, radius, inset) {
+    // radius: angka atau [kiri-atas, kanan-atas, kanan-bawah, kiri-bawah], seperti CSS
+    const lim = Math.min(w, h) / 2;
+    const [tl, tr, br, bl] = (Array.isArray(radius) ? radius : [radius, radius, radius, radius])
+        .map(r => Math.max(0, Math.min(r, lim) - inset));
+    const x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset;
+    cr.newPath();
+    cr.arc(x1 - tr, y0 + tr, tr, -Math.PI / 2, 0);
+    cr.arc(x1 - br, y1 - br, br, 0, Math.PI / 2);
+    cr.arc(x0 + bl, y1 - bl, bl, Math.PI / 2, Math.PI);
+    cr.arc(x0 + tl, y0 + tl, tl, Math.PI, 1.5 * Math.PI);
+    cr.closePath();
+}
+
+function ellipsePath(cr, w, h, inset) {
+    cr.newPath();
+    cr.save();
+    cr.translate(w / 2, h / 2);
+    cr.scale(Math.max(w / 2 - inset, 0.1), Math.max(h / 2 - inset, 0.1));
+    cr.arc(0, 0, 1, 0, 2 * Math.PI);
+    cr.restore();
+    cr.closePath();
+}
+
+// Bentuk mainan berukuran w×h piksel (pengganti St.Widget ber-CSS).
+// s: {fill, gradient: [atas, bawah], stroke, line, radius, ellipse, shadow}
+function shape(w, h, s) {
+    w = Math.round(w);
+    h = Math.round(h);
+    const g = new St.Widget({width: w, height: h});
+    const line = s.stroke ? s.line ?? 2 : 0;
+    const path = (cr, inset) => s.ellipse
+        ? ellipsePath(cr, w, h, inset)
+        : roundRectPath(cr, w, h, s.radius ?? 0, inset);
+    paintArea(g, 0, 0, w, h, cr => {
+        if (s.shadow) {
+            cr.save();
+            cr.translate(0, 1);
+            path(cr, 0);
+            cr.setSourceRGBA(0, 0, 0, 0.35);
+            cr.fill();
+            cr.restore();
+        }
+        if (s.fill || s.gradient) {
+            path(cr, line / 2);
+            if (s.gradient) {
+                const grad = new Cairo.LinearGradient(0, 0, 0, h);
+                grad.addColorStopRGBA(0, ...parseColor(s.gradient[0]));
+                grad.addColorStopRGBA(1, ...parseColor(s.gradient[1]));
+                cr.setSource(grad);
+            } else {
+                cr.setSourceRGBA(...parseColor(s.fill));
+            }
+            cr.fill();
+        }
+        if (line) {
+            path(cr, line / 2);
+            cr.setLineWidth(line);
+            cr.setSourceRGBA(...parseColor(s.stroke));
+            cr.stroke();
+        }
+    });
     return g;
 }
 
@@ -626,6 +739,12 @@ export class Buddy {
             height: ACTOR_H,
         });
 
+        // Wadah badan (tanpa gelembung kata-kata): yang diperbesar saat hover, supaya
+        // teks gelembung tetap 1:1 dan tajam
+        const body = new St.Widget({width: CHAR_W, height: ACTOR_H});
+        body.set_pivot_point(0.5, 0.75);
+        this._actor.add_child(body);
+
         // Bayangan tanah: elips kecil yang di-blur lembut
         const ground = new St.Widget({
             style_class: 'claude-buddy-ground',
@@ -635,17 +754,17 @@ export class Buddy {
         ground.set_position(3 * U, CHAR_H - Math.round(0.5 * U));
         ground.set_pivot_point(0.5, 0.5);
         this._addBlur(ground, 8);
-        this._actor.add_child(ground);
+        body.add_child(ground);
         ground.hide(); // bayangan tanah dimatikan (permintaan pengguna)
 
         // Bayangan belakang: klon siluet, digelapkan + blur
         const dropShadow = new Clutter.Clone({opacity: 95});
-        this._actor.add_child(dropShadow);
+        body.add_child(dropShadow);
 
-        const float = layer(this._actor);
+        const float = layer(body);
         const bounce = layer(float);
         const ch = layer(bounce);
-        const p = {ground, float, bounce, char: ch};
+        const p = {body, ground, float, bounce, char: ch};
 
         dropShadow.source = float;
         dropShadow.set_position(Math.round(0.7 * U), Math.round(0.9 * U));
@@ -1526,8 +1645,7 @@ export class Buddy {
             if (!alive())
                 return;
             for (const ex of [5.3, 10.3]) {
-                const t = this._prop({style_class: 'claude-buddy-tear',
-                    width: Math.round(0.5 * U), height: Math.round(0.8 * U)}, ex * U, 6.2 * U);
+                const t = this._prop(shape(0.5 * U, 0.8 * U, TOY.tear), ex * U, 6.2 * U);
                 t.ease({translation_y: 4 * U, opacity: 0, duration: 900, mode: M.EASE_IN_QUAD,
                     onComplete: () => t.destroy()});
             }
@@ -2443,7 +2561,8 @@ export class Buddy {
     // --- adegan bermain ----------------------------------------------------
 
     _prop(params, x, y) {
-        const w = new St.Widget(params);
+        // params: aktor jadi (mis. dari shape()) atau properti St.Widget
+        const w = params instanceof Clutter.Actor ? params : new St.Widget(params);
         w.set_position(Math.round(x), Math.round(y));
         this._p.float.add_child(w);
         this._props.add(w);
@@ -2485,8 +2604,8 @@ export class Buddy {
         if (this._p) {
             this._resetPose();
             const s = this._actor.hover ? 1.08 : 1;
-            this._actor.set_pivot_point(0.5, 0.75);
-            this._actor.ease({scale_x: s, scale_y: s, duration: 200, mode: M.EASE_OUT_QUAD});
+            this._actor.ease({scale_x: 1, scale_y: 1, duration: 200, mode: M.EASE_OUT_QUAD});
+            this._p.body.ease({scale_x: s, scale_y: s, duration: 200, mode: M.EASE_OUT_QUAD});
             this._snapInside();
             this._restack();
         }
@@ -2515,12 +2634,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const ballSize = Math.round(2.2 * U);
-        const ball = this._prop({
-            style_class: 'claude-buddy-ball',
-            style: `border-radius: ${ballSize}px;`,
-            width: ballSize,
-            height: ballSize,
-        }, CHAR_W / 2 - ballSize / 2, -140);
+        const ball = this._prop(shape(ballSize, ballSize, TOY.ball), CHAR_W / 2 - ballSize / 2, -140);
         ball.set_pivot_point(0.5, 0.5);
         ball.opacity = 0;
         this._say(pick(['Liat nih, aku jago juggling! ⚽', 'Main bola yuk! ⚽']));
@@ -2584,12 +2698,7 @@ export class Buddy {
         const hy = 6 * U;
         const yoyoSize = 2 * U;
         const string = this._prop({style_class: 'claude-buddy-string', width: 2, height: 1}, hx, hy);
-        const yoyo = this._prop({
-            style_class: 'claude-buddy-yoyo',
-            style: `border-radius: ${yoyoSize}px;`,
-            width: yoyoSize,
-            height: yoyoSize,
-        }, hx - yoyoSize / 2 + 1, hy - yoyoSize / 2);
+        const yoyo = this._prop(shape(yoyoSize, yoyoSize, TOY.yoyo), hx - yoyoSize / 2 + 1, hy - yoyoSize / 2);
         yoyo.set_pivot_point(0.5, 0.5);
         p.armR.remove_all_transitions();
         p.armR.ease({rotation_angle_z: 15, duration: 150, mode: M.EASE_OUT_QUAD});
@@ -2640,12 +2749,7 @@ export class Buddy {
                 if (!alive())
                     return;
                 const size = rand(1.3 * U, 2.8 * U);
-                const b = this._prop({
-                    style_class: 'claude-buddy-soap',
-                    style: `border-radius: ${size}px;`,
-                    width: size,
-                    height: size,
-                }, 8 * U - size / 2, 6.5 * U - size / 2);
+                const b = this._prop(shape(size, size, TOY.soap), 8 * U - size / 2, 6.5 * U - size / 2);
                 b.set_pivot_point(0.5, 0.5);
                 b.set({scale_x: 0.2, scale_y: 0.2, opacity: 230});
                 b.ease({
@@ -2677,8 +2781,8 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const laptop = this._prop({width: 7 * U, height: 4 * U}, 4.5 * U, 5 * U);
-        const screen = new St.Widget({style_class: 'claude-buddy-laptop-screen', width: 7 * U, height: 3.2 * U});
-        const base = new St.Widget({style_class: 'claude-buddy-laptop-base', width: 8 * U, height: Math.round(0.8 * U)});
+        const screen = shape(7 * U, 3.2 * U, TOY.laptopScreen);
+        const base = shape(8 * U, 0.8 * U, TOY.laptopBase);
         base.set_position(-0.5 * U, 3.2 * U);
         laptop.add_child(screen);
         laptop.add_child(base);
@@ -2756,23 +2860,13 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const guitar = this._prop({width: 8 * U, height: 3 * U}, 1.5 * U, 5 * U);
-        const body = new St.Widget({
-            style_class: 'claude-buddy-guitar-body',
-            style: `border-radius: ${1.4 * U}px;`,
-            width: 3.4 * U,
-            height: 2.8 * U,
-        });
-        const hole = new St.Widget({
-            style_class: 'claude-buddy-guitar-hole',
-            style: `border-radius: ${0.5 * U}px;`,
-            width: U,
-            height: U,
-        });
+        const body = shape(3.4 * U, 2.8 * U, TOY.guitarBody);
+        const hole = shape(U, U, TOY.guitarHole);
         hole.set_position(1.2 * U, 0.9 * U);
         body.add_child(hole);
-        const neck = new St.Widget({style_class: 'claude-buddy-guitar-neck', width: 4.2 * U, height: Math.round(0.55 * U)});
+        const neck = shape(4.2 * U, 0.55 * U, TOY.guitarNeck);
         neck.set_position(3.2 * U, 1.1 * U);
-        const head = new St.Widget({style_class: 'claude-buddy-guitar-neck', width: U, height: Math.round(1.1 * U)});
+        const head = shape(U, 1.1 * U, TOY.guitarNeck);
         head.set_position(7.2 * U, 0.8 * U);
         guitar.add_child(neck);
         guitar.add_child(head);
@@ -2814,11 +2908,11 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const mug = this._prop({width: 3 * U, height: 2.6 * U}, 13.5 * U, 4.5 * U);
-        const cup = new St.Widget({style_class: 'claude-buddy-mug', width: 2.2 * U, height: 2.4 * U});
-        const coffee = new St.Widget({style_class: 'claude-buddy-coffee', width: Math.round(1.6 * U), height: Math.round(0.4 * U)});
+        const cup = shape(2.2 * U, 2.4 * U, TOY.mug);
+        const coffee = shape(1.6 * U, 0.4 * U, TOY.coffee);
         coffee.set_position(Math.round(0.3 * U), Math.round(0.25 * U));
         cup.add_child(coffee);
-        const handle = new St.Widget({style_class: 'claude-buddy-mug-handle', width: Math.round(0.8 * U), height: Math.round(1.2 * U)});
+        const handle = shape(0.8 * U, 1.2 * U, TOY.mugHandle);
         handle.set_position(Math.round(2 * U), Math.round(0.5 * U));
         mug.add_child(handle);
         mug.add_child(cup);
@@ -2923,12 +3017,7 @@ export class Buddy {
     _sceneJumpRope() {
         const alive = this._startScene();
         const p = this._p;
-        const rope = this._prop({
-            style_class: 'claude-buddy-rope',
-            style: `border-radius: ${6 * U}px;`,
-            width: CHAR_W + 2 * U,
-            height: CHAR_H + 2 * U,
-        }, -U, -1.5 * U);
+        const rope = this._prop(shape(CHAR_W + 2 * U, CHAR_H + 2 * U, TOY.rope), -U, -1.5 * U);
         rope.set_pivot_point(0.5, 0.5);
         rope.opacity = 0;
         rope.ease({opacity: 255, duration: 200});
@@ -2979,19 +3068,10 @@ export class Buddy {
         const p = this._p;
         const size = Math.round(3.2 * U);
         const balloon = this._prop({width: size, height: 9 * U}, -2.4 * U, -4.5 * U);
-        const string = new St.Widget({style_class: 'claude-buddy-string', width: 2, height: 5.5 * U});
+        const string = shape(2, 5.5 * U, TOY.string);
         string.set_position(Math.round(size / 2), size);
-        const ball = new St.Widget({
-            style_class: 'claude-buddy-balloon',
-            style: `border-radius: ${size}px;`,
-            width: size,
-            height: Math.round(size * 1.15),
-        });
-        const shine = new St.Widget({
-            style: `background-color: rgba(255,255,255,0.6); border-radius: ${U}px;`,
-            width: Math.round(0.7 * U),
-            height: Math.round(0.9 * U),
-        });
+        const ball = shape(size, size * 1.15, TOY.balloon);
+        const shine = shape(0.7 * U, 0.9 * U, TOY.shine);
         shine.set_position(Math.round(0.6 * U), Math.round(0.6 * U));
         ball.add_child(shine);
         balloon.add_child(string);
@@ -3028,15 +3108,10 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const board = this._prop({width: 13 * U, height: 2 * U}, 1.5 * U, 9.6 * U);
-        const deck = new St.Widget({style_class: 'claude-buddy-skate', width: 13 * U, height: Math.round(0.7 * U)});
+        const deck = shape(13 * U, 0.7 * U, TOY.skate);
         board.add_child(deck);
         for (const wx of [1.5, 10.5]) {
-            const wheel = new St.Widget({
-                style_class: 'claude-buddy-wheel',
-                style: `border-radius: ${U}px;`,
-                width: U,
-                height: U,
-            });
+            const wheel = shape(U, U, TOY.wheel);
             wheel.set_position(Math.round(wx * U), Math.round(0.6 * U));
             board.add_child(wheel);
         }
@@ -3091,10 +3166,10 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const book = this._prop({width: 8 * U, height: 3.6 * U}, 4 * U, 5.2 * U);
-        const cover = new St.Widget({style_class: 'claude-buddy-book-cover', width: Math.round(8.4 * U), height: Math.round(3.6 * U)});
+        const cover = shape(8.4 * U, 3.6 * U, TOY.bookCover);
         cover.set_position(Math.round(-0.2 * U), 0);
-        const left = new St.Widget({style_class: 'claude-buddy-page', width: 4 * U, height: Math.round(3.2 * U)});
-        const right = new St.Widget({style_class: 'claude-buddy-page', width: 4 * U, height: Math.round(3.2 * U)});
+        const left = shape(4 * U, 3.2 * U, TOY.page);
+        const right = shape(4 * U, 3.2 * U, TOY.page);
         right.set_position(4 * U, 0);
         book.add_child(cover);
         book.add_child(left);
@@ -3121,7 +3196,7 @@ export class Buddy {
             this._later(1200, () => {
                 if (!alive())
                     return;
-                const flip = new St.Widget({style_class: 'claude-buddy-page', width: 4 * U, height: Math.round(3.2 * U)});
+                const flip = shape(4 * U, 3.2 * U, TOY.page);
                 flip.set_position(4 * U, 0);
                 flip.set_pivot_point(0, 0.5);
                 book.add_child(flip);
@@ -3148,7 +3223,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const wand = this._prop({width: 4 * U, height: 2 * U}, 14.5 * U, 3 * U);
-        const stick = new St.Widget({style_class: 'claude-buddy-wand', width: Math.round(3.4 * U), height: Math.round(0.35 * U)});
+        const stick = shape(3.4 * U, 0.35 * U, TOY.wand);
         stick.set_position(0, Math.round(0.8 * U));
         const tip = new St.Label({text: '⭐', style_class: 'claude-buddy-star'});
         tip.set_position(Math.round(3 * U), 0);
@@ -3195,7 +3270,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const colors = ['#F94144', '#F9C74F', '#43AA8B', '#277DA1', '#FFFFFF', '#F8961E'];
-        const cube = this._prop({style_class: 'claude-buddy-rubik', width: 3 * U, height: 3 * U}, 6.5 * U, 5 * U);
+        const cube = this._prop(shape(3 * U, 3 * U, TOY.rubik), 6.5 * U, 5 * U);
         const cells = [];
         for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 3; c++)
@@ -3240,8 +3315,7 @@ export class Buddy {
     _sceneSelfie() {
         const alive = this._startScene();
         const p = this._p;
-        const phone = this._prop({style_class: 'claude-buddy-phone',
-            width: Math.round(1.8 * U), height: Math.round(3 * U)}, 15 * U, U);
+        const phone = this._prop(shape(1.8 * U, 3 * U, TOY.phone), 15 * U, U);
         phone.opacity = 0;
         phone.ease({opacity: 255, duration: 200});
         p.armR.remove_all_transitions();
@@ -3259,7 +3333,7 @@ export class Buddy {
             this._later(500, () => {
                 if (!alive())
                     return;
-                const flash = this._prop({style_class: 'claude-buddy-flash', width: CHAR_W, height: CHAR_H}, 0, 0);
+                const flash = this._prop(shape(CHAR_W, CHAR_H, TOY.flash), 0, 0);
                 flash.ease({opacity: 0, duration: 400, onComplete: () => flash.destroy()});
                 this._say(pick(['Cekrek! 📸 Ganteng kan?', 'Buat story IG 🤳✨']));
                 this._later(1500, () => alive() && this._endScene());
@@ -3277,16 +3351,24 @@ export class Buddy {
         if (!this._actor || !text)
             return;
         const now = Date.now();
-        // Jangan potong kalimat yang belum selesai dibaca; antrekan saja
+        const b = this._p.bubble;
+        // Kalimat yang baru muncul diberi waktu baca minimal; kalimat berikutnya
+        // menunggu sebentar lalu langsung menggantikannya (tanpa menunggu gelembung
+        // hilang dulu), supaya ucapan tidak telat dari adegannya.
         if (!urgent && now < (this._speakUntil ?? 0)) {
+            if (b.root.visible && b.full === text)
+                return;
             this._sayQueue ??= [];
             if (this._sayQueue.length < 2 && !this._sayQueue.some(q => q.text === text))
                 this._sayQueue.push({text, t: now});
+            if (!this._timeouts.has(this._flushId))
+                this._flushId = this._later(this._speakUntil - now + 10, () => this._nextQueued());
             return;
         }
-        if (urgent)
+        if (urgent) {
             this._sayQueue = [];
-        const b = this._p.bubble;
+            this._cancel(this._flushId);
+        }
         this._cancel(this._bubbleHideId);
         this._cancel(this._typeId);
 
@@ -3294,6 +3376,7 @@ export class Buddy {
         b.box.set_size(-1, -1);
         b.text.width = -1;
         b.text.text = text;
+        b.full = text;
         const [, natW] = b.text.get_preferred_width(-1);
         if (natW > BUBBLE_MAX_W)
             b.text.width = BUBBLE_MAX_W;
@@ -3319,43 +3402,50 @@ export class Buddy {
             b.tailInner.set_position(tailX - 5, by + boxH - 8);
         }
 
+        const showing = b.root.visible && b.root.opacity > 0;
         b.root.set_pivot_point(0.5, below ? 0.0 : 1.0);
         b.root.remove_all_transitions();
-        b.root.set({visible: true, opacity: 0, scale_x: 0.5, scale_y: 0.5, translation_y: below ? -8 : 8});
-        b.root.ease({
-            opacity: 255,
-            scale_x: 1,
-            scale_y: 1,
-            translation_y: 0,
-            duration: 280,
-            mode: M.EASE_OUT_BACK,
-        });
+        if (showing) {
+            // Ganti kalimat: cukup "denyut" kecil, gelembung tidak hilang dulu
+            b.root.set({opacity: 255, scale_x: 0.94, scale_y: 0.94, translation_y: 0});
+            b.root.ease({scale_x: 1, scale_y: 1, duration: 160, mode: M.EASE_OUT_BACK});
+        } else {
+            b.root.set({visible: true, opacity: 0, scale_x: 0.6, scale_y: 0.6, translation_y: below ? -6 : 6});
+            b.root.ease({opacity: 255, duration: 120, mode: M.EASE_OUT_QUAD});
+            b.root.ease({
+                scale_x: 1,
+                scale_y: 1,
+                translation_y: 0,
+                duration: 220,
+                mode: M.EASE_OUT_BACK,
+            });
+        }
 
         const chars = Array.from(text);
-        // minimal sampai selesai diketik + waktu baca
-        this._speakUntil = now + 120 + chars.length * TYPE_SPEED + 1400 + chars.length * 35;
+        // minimal sampai selesai diketik + waktu baca singkat
+        this._speakUntil = now + chars.length * TYPE_SPEED + 900 + chars.length * 20;
+        // Huruf pertama langsung tampil bersamaan dengan munculnya gelembung
         let n = 0;
-        b.text.text = '';
         const type = () => {
             n++;
             b.text.text = chars.slice(0, n).join('');
             if (n < chars.length) {
                 this._typeId = this._later(TYPE_SPEED, type);
             } else {
-                this._bubbleHideId = this._later(2200 + chars.length * 45,
+                this._bubbleHideId = this._later(1800 + chars.length * 40,
                     () => this._hideBubble());
             }
         };
-        this._typeId = this._later(120, type);
+        type();
     }
 
     _hideBubble() {
         const root = this._p.bubble.root;
         root.ease({
             opacity: 0,
-            scale_x: 0.8,
-            scale_y: 0.8,
-            duration: 200,
+            scale_x: 0.85,
+            scale_y: 0.85,
+            duration: 180,
             mode: M.EASE_IN_QUAD,
             onComplete: () => {
                 root.visible = false;
@@ -3365,9 +3455,11 @@ export class Buddy {
     }
 
     _nextQueued() {
+        this._cancel(this._flushId);
         while (this._sayQueue?.length) {
             const item = this._sayQueue.shift();
-            if (Date.now() - item.t < 6000) {
+            // Kalimat yang sudah terlalu lama menunggu tidak relevan lagi
+            if (Date.now() - item.t < 4000) {
                 this._say(item.text);
                 return;
             }
@@ -3390,8 +3482,7 @@ export class Buddy {
         if (this._goingAway)
             return;
         if (this._exhausted) {
-            this._actor.set_pivot_point(0.5, 0.75);
-            this._actor.ease({scale_x: hover ? 1.05 : 1, scale_y: hover ? 1.05 : 1, duration: 200});
+            this._p.body.ease({scale_x: hover ? 1.05 : 1, scale_y: hover ? 1.05 : 1, duration: 200});
             return;
         }
         if (!this._busy) {
@@ -3399,8 +3490,7 @@ export class Buddy {
             this._p.eyes.set({scale_y: 1, translation_x: 0});
         }
 
-        this._actor.set_pivot_point(0.5, 0.75);
-        this._actor.ease({
+        this._p.body.ease({
             scale_x: hover ? 1.08 : 1,
             scale_y: hover ? 1.08 : 1,
             duration: 200,
@@ -3702,8 +3792,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         // cambuk: garis melengkung yang menyabet
-        const whip = this._prop({style_class: 'claude-buddy-whip', width: 10 * U, height: Math.round(0.35 * U)},
-            CHAR_W + U, 2 * U);
+        const whip = this._prop(shape(10 * U, 0.35 * U, TOY.whip), CHAR_W + U, 2 * U);
         whip.set_pivot_point(1.0, 0.5);
         whip.set({rotation_angle_z: -60, opacity: 0});
         whip.ease({opacity: 255, duration: 100});
@@ -3796,8 +3885,7 @@ export class Buddy {
                 onComplete: () => p.bounce.ease({translation_y: 0, duration: 140})});
             // air mata deras
             for (const ex of [5.3, 10.3]) {
-                const t = this._prop({style_class: 'claude-buddy-tear',
-                    width: Math.round(0.5 * U), height: Math.round(0.8 * U)}, ex * U, 6.2 * U);
+                const t = this._prop(shape(0.5 * U, 0.8 * U, TOY.tear), ex * U, 6.2 * U);
                 t.ease({translation_y: 4 * U, translation_x: rand(-6, 7), opacity: 0, duration: 700,
                     mode: M.EASE_IN_QUAD, onComplete: () => t.destroy()});
             }

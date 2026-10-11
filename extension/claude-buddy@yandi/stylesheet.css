@@ -21,37 +21,8 @@
 }
 
 /* Properti adegan */
-.claude-buddy-ball {
-  background-color: #ffffff;
-  border: 3px solid #2b2230;
-  background-gradient-direction: vertical;
-  background-gradient-start: #ffffff;
-  background-gradient-end: #ff6b6b;
-}
-
 .claude-buddy-string {
   background-color: rgba(255, 255, 255, 0.85);
-}
-
-.claude-buddy-yoyo {
-  background-color: #5aa9ff;
-  border: 3px solid #2b2230;
-}
-
-.claude-buddy-soap {
-  background-color: rgba(170, 225, 255, 0.25);
-  border: 2px solid rgba(255, 255, 255, 0.85);
-}
-
-.claude-buddy-laptop-screen {
-  background-color: #2b2230;
-  border: 2px solid #9aa0aa;
-  border-radius: 4px;
-}
-
-.claude-buddy-laptop-base {
-  background-color: #c9ced6;
-  border-radius: 3px;
 }
 
 .claude-buddy-code-line {
@@ -75,39 +46,10 @@
 }
 
 /* Mainan baru */
-.claude-buddy-guitar-body {
-  background-color: #c9783e;
-  border: 2px solid #2b2230;
-}
-
-.claude-buddy-guitar-hole {
-  background-color: #3a2416;
-}
-
-.claude-buddy-guitar-neck {
-  background-color: #6b4226;
-  border: 1px solid #2b2230;
-}
-
 .claude-buddy-note {
   font-size: 18pt;
   font-weight: 700;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-
-.claude-buddy-mug {
-  background-color: #ffffff;
-  border: 2px solid #2b2230;
-  border-radius: 2px 2px 7px 7px;
-}
-
-.claude-buddy-coffee {
-  background-color: #6b4226;
-}
-
-.claude-buddy-mug-handle {
-  border: 3px solid #2b2230;
-  border-radius: 6px;
 }
 
 .claude-buddy-steam {
@@ -120,21 +62,12 @@
   font-size: 26pt;
 }
 
-.claude-buddy-rope {
-  border: 3px solid rgba(255, 255, 255, 0.9);
-}
-
 .claude-buddy-count {
   color: #ffe27a;
   font-family: monospace;
   font-size: 15pt;
   font-weight: 700;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-.claude-buddy-balloon {
-  background-color: #ff5a6e;
-  border: 2px solid #2b2230;
 }
 
 .claude-buddy-pop {
@@ -268,43 +201,11 @@
   font-size: 20pt;
 }
 
-.claude-buddy-tear {
-  background-color: #7fc8ff;
-  border-radius: 6px 6px 8px 8px;
-}
-
 .claude-buddy-dust {
   font-size: 14pt;
 }
 
 /* Mainan tambahan */
-.claude-buddy-skate {
-  background-color: #8b5a3c;
-  border: 2px solid #2b2230;
-  border-radius: 6px;
-}
-
-.claude-buddy-wheel {
-  background-color: #2b2230;
-  border: 2px solid #c9ced6;
-}
-
-.claude-buddy-book-cover {
-  background-color: #3a6ea5;
-  border: 2px solid #2b2230;
-  border-radius: 4px;
-}
-
-.claude-buddy-page {
-  background-color: #fff8ee;
-  border: 1px solid rgba(43, 34, 48, 0.5);
-}
-
-.claude-buddy-wand {
-  background-color: #2b2230;
-  border-radius: 3px;
-}
-
 .claude-buddy-star,
 .claude-buddy-sparkle {
   font-size: 15pt;
@@ -312,22 +213,6 @@
 
 .claude-buddy-prize {
   font-size: 26pt;
-}
-
-.claude-buddy-rubik {
-  background-color: #1f1e1d;
-  border-radius: 5px;
-}
-
-.claude-buddy-phone {
-  background-color: #2b2230;
-  border: 2px solid #9aa0aa;
-  border-radius: 6px;
-}
-
-.claude-buddy-flash {
-  background-color: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
 }
 
 /* Interaksi */
@@ -339,12 +224,6 @@
   color: #c9783e;
   font-size: 22pt;
   font-weight: 800;
-}
-
-.claude-buddy-whip {
-  background-color: #6b4226;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .claude-buddy-ctar {
