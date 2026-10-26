@@ -1,5 +1,5 @@
 [Unit]
-Description=Claude Buddy: perbarui status Claude Code berkala
+Description=Teman Ngoding: perbarui status akun berkala
 
 [Timer]
 OnBootSec=30s

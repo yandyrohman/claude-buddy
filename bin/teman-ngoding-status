@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Kumpulkan status akun CLI AI untuk Teman Ngoding.
+
+- Claude Code: info akun + sisa limit (accounts, usage)
+- Gemini CLI, Codex CLI, OpenCode: terpasang/tidak, versi, info akun (agents)
+
+Berjalan sebagai root lewat teman-ngoding-status.service. Token & API key hanya
+dibaca di sini dan TIDAK ditulis ke file output; output hanya berisi info akun
+dan persentase pemakaian, di /run/teman-ngoding/status.json (bisa dibaca user).
+"""
+
+import base64
+import json
+import os
+import shutil
+import time
+import urllib.error
+import urllib.request
+
+OUT_DIR = '/run/teman-ngoding'
+OUT_FILE = os.path.join(OUT_DIR, 'status.json')
+HOMES = [('root', '/root'), ('yandi', '/home/yandi')]
+USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+ROOT_PATH = '/root/.local/bin:/usr/local/bin:/usr/bin:/bin:/snap/bin'
+
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def account_info(home):
+    cfg = load_json(os.path.join(home, '.claude.json')) or {}
+    acc = cfg.get('oauthAccount') or {}
+    creds = (load_json(os.path.join(home, '.claude', '.credentials.json')) or {}).get('claudeAiOauth') or {}
+    if not acc and not creds:
+        return None, None
+    info = {
+        'email': acc.get('emailAddress'),
+        'name': acc.get('displayName') or acc.get('fullName'),
+        'organization': acc.get('organizationName'),
+        'plan': creds.get('subscriptionType'),
+        'token_expires_at': (creds.get('expiresAt') or 0) / 1000 or None,
+    }
+    return info, creds.get('accessToken')
+
+
+def fetch_usage(token):
+    req = urllib.request.Request(USAGE_URL, headers={
+        'Authorization': f'Bearer {token}',
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'teman-ngoding-status/1.0',
+    })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.load(r)
+
+    def part(key):
+        v = data.get(key) or {}
+        if v.get('utilization') is None:
+            return None
+        return {'percent': v['utilization'], 'resets_at': v.get('resets_at')}
+
+    return {
+        'session': part('five_hour'),
+        'weekly': part('seven_day'),
+        'weekly_opus': part('seven_day_opus'),
+        'weekly_sonnet': part('seven_day_sonnet'),
+    }
+
+
+def package_version(binary):
+    """Versi CLI dari package.json paket npm-nya (tanpa menjalankan CLI)."""
+    path = os.path.realpath(binary)
+    for _ in range(6):
+        path = os.path.dirname(path)
+        pkg = load_json(os.path.join(path, 'package.json'))
+        if pkg and pkg.get('version'):
+            return pkg['version']
+    return None
+
+
+def jwt_claims(token):
+    try:
+        payload = token.split('.')[1]
+        return json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
+    except (AttributeError, IndexError, ValueError):
+        return {}
+
+
+def gemini_account():
+    home = '/root/.gemini'
+    settings = load_json(os.path.join(home, 'settings.json')) or {}
+    auth = ((settings.get('security') or {}).get('auth') or {}).get('selectedType')
+    if auth == 'gemini-api-key':
+        try:
+            with open(os.path.join(home, '.env')) as f:
+                has_key = any(line.startswith('GEMINI_API_KEY=') and len(line.strip()) > 15 for line in f)
+        except OSError:
+            has_key = False
+        return ({'auth': 'API key'}, None) if has_key else (None, None)
+    email = (load_json(os.path.join(home, 'google_accounts.json')) or {}).get('active')
+    if not email or not os.path.exists(os.path.join(home, 'oauth_creds.json')):
+        return None, None
+    note = 'Kalau muncul IneligibleTierError, pakai API key lewat "Ganti Akun".'
+    return {'email': email, 'auth': 'Akun Google'}, note
+
+
+def codex_account():
+    data = load_json('/root/.codex/auth.json') or {}
+    tokens = data.get('tokens') or {}
+    if tokens.get('id_token'):
+        claims = jwt_claims(tokens['id_token'])
+        plan = (claims.get('https://api.openai.com/auth') or {}).get('chatgpt_plan_type')
+        return {'email': claims.get('email'), 'name': claims.get('name'), 'plan': plan,
+                'auth': 'Akun ChatGPT'}, None
+    if data.get('OPENAI_API_KEY'):
+        return {'auth': 'API key'}, None
+    return None, None
+
+
+def opencode_account():
+    data = load_json('/root/.local/share/opencode/auth.json') or {}
+    providers = [f"{name} ({(v or {}).get('type', '?')})" for name, v in sorted(data.items())]
+    if not providers:
+        return None, None
+    return {'auth': f'{len(providers)} provider', 'providers': providers}, None
+
+
+AGENTS = {
+    'gemini': ('gemini', gemini_account),
+    'codex': ('codex', codex_account),
+    'opencode': ('opencode', opencode_account),
+}
+
+
+def agents_status():
+    out = {}
+    for name, (binary, account) in AGENTS.items():
+        path = shutil.which(binary, path=ROOT_PATH)
+        info = {'installed': bool(path)}
+        if path:
+            info['version'] = package_version(path)
+            try:
+                info['account'], info['note'] = account()
+            except Exception as e:  # noqa: BLE001 - jangan sampai satu CLI merusak semuanya
+                info['account'], info['note'] = None, f'Gagal baca akun: {type(e).__name__}'
+        out[name] = info
+    return out
+
+
+def main():
+    status = {'updated_at': time.time(), 'accounts': {}, 'usage': None, 'error': None}
+    status['agents'] = agents_status()
+    tokens = []
+    for user, home in HOMES:
+        info, token = account_info(home)
+        if info:
+            status['accounts'][user] = info
+        if token:
+            tokens.append((user, token))
+
+    errors = []
+    for user, token in tokens:
+        try:
+            status['usage'] = fetch_usage(token)
+            status['usage_source'] = user
+            break
+        except urllib.error.HTTPError as e:
+            errors.append(f'{user}: HTTP {e.code}')
+        except Exception as e:  # noqa: BLE001 - laporkan apa pun ke maskot
+            errors.append(f'{user}: {type(e).__name__}')
+    if status['usage'] is None:
+        status['error'] = '; '.join(errors) or 'Belum login ke Claude Code'
+
+    os.makedirs(OUT_DIR, mode=0o755, exist_ok=True)
+    tmp = OUT_FILE + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(status, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, OUT_FILE)
+
+
+if __name__ == '__main__':
+    main()

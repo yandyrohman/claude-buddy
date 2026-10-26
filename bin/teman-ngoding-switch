@@ -1,0 +1,117 @@
+#!/bin/bash
+# Ganti akun CLI (versi root yang dipakai Teman Ngoding).
+#   teman-ngoding-switch [claude|gemini|codex|opencode]
+# Halaman login dibuka di Chrome milik user, lalu status Teman Ngoding diperbarui.
+
+agent="${1:-claude}"
+
+as_root() {
+    sudo env \
+        HOME=/root \
+        PATH="/usr/local/lib/teman-ngoding/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" \
+        BROWSER=/usr/local/lib/teman-ngoding/open-in-user-chrome \
+        TEMAN_NGODING_USER="$USER" \
+        WAYLAND_DISPLAY="$WAYLAND_DISPLAY" DISPLAY="$DISPLAY" \
+        "$@"
+}
+
+gemini_auth() {
+    # Set metode login Gemini CLI (security.auth.selectedType di settings.json)
+    as_root python3 -c '
+import json, sys
+path = "/root/.gemini/settings.json"
+try:
+    data = json.load(open(path))
+except (OSError, ValueError):
+    data = {}
+data.setdefault("security", {}).setdefault("auth", {})["selectedType"] = sys.argv[1]
+json.dump(data, open(path, "w"), indent=2)
+' "$1"
+}
+
+ask_key() {
+    # Baca API key tanpa menampilkannya di layar
+    read -rsp "Tempel API key lalu Enter: " key
+    echo
+    [ -n "$key" ]
+}
+
+case "$agent" in
+    claude)
+        echo "🔁 Ganti akun Claude Code (Teman Ngoding)"
+        echo "   Halaman login akan terbuka di Chrome."
+        echo "   Kalau perlu, pilih / login akun lain dulu di claude.ai."
+        echo
+        as_root bash -c '/root/.local/bin/claude auth login; rc=$?; echo; /root/.local/bin/claude auth status --text; exit $rc'
+        status=$?
+        ;;
+    gemini)
+        echo "🔁 Ganti akun Gemini CLI (Teman Ngoding)"
+        echo
+        echo "  1) Login dengan akun Google (butuh langganan Gemini Code Assist / Google AI)"
+        echo "  2) Pakai API key dari https://aistudio.google.com/apikey"
+        read -rp "Pilih [1/2]: " choice
+        if [ "$choice" = "2" ]; then
+            if ask_key; then
+                printf 'GEMINI_API_KEY=%s\n' "$key" | as_root bash -c 'umask 077; mkdir -p /root/.gemini; cat > /root/.gemini/.env'
+                gemini_auth gemini-api-key
+                echo "✅ API key disimpan di /root/.gemini/.env"
+                status=0
+            else
+                status=1
+            fi
+        else
+            gemini_auth oauth-personal
+            # Lupakan login lama supaya Gemini CLI meminta login lagi
+            as_root bash -c 'cd /root/.gemini 2>/dev/null && for f in oauth_creds.json google_accounts.json; do [ -e "$f" ] && mv -f "$f" "$f.bak"; done; true'
+            echo "Gemini CLI akan terbuka dan meminta login. Setelah berhasil, ketik /quit."
+            echo
+            as_root bash -c 'cd /root && gemini'
+            status=$?
+        fi
+        ;;
+    codex)
+        echo "🔁 Ganti akun Codex CLI (Teman Ngoding)"
+        echo
+        echo "  1) Login dengan akun ChatGPT (halaman login terbuka di Chrome)"
+        echo "  2) Pakai OpenAI API key"
+        read -rp "Pilih [1/2]: " choice
+        as_root codex logout >/dev/null 2>&1
+        if [ "$choice" = "2" ]; then
+            if ask_key; then
+                printf '%s' "$key" | as_root codex login --with-api-key
+                status=$?
+            else
+                status=1
+            fi
+        else
+            as_root codex login
+            status=$?
+        fi
+        echo
+        as_root codex login status
+        ;;
+    opencode)
+        echo "🔁 Ganti akun OpenCode (Teman Ngoding)"
+        echo "   Pilih provider (mis. Anthropic, OpenAI, Google) lalu ikuti petunjuknya."
+        echo
+        as_root opencode auth login
+        status=$?
+        echo
+        as_root opencode auth list
+        ;;
+    *)
+        echo "Karakter tidak dikenal: $agent" >&2
+        status=2
+        ;;
+esac
+
+systemctl start teman-ngoding-status.service 2>/dev/null
+
+echo
+if [ "$status" -eq 0 ]; then
+    echo "✅ Selesai! Akun Teman Ngoding sudah diperbarui."
+else
+    echo "⚠️  Login tidak selesai (kode $status)."
+fi
+read -rp "Tekan Enter untuk menutup..."

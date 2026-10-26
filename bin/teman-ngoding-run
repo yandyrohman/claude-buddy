@@ -1,0 +1,34 @@
+#!/bin/bash
+# Jalankan CLI AI sebagai root: teman-ngoding-run [claude|gemini|codex|opencode] [argumen...]
+# Dipakai oleh "Teman Ngoding" (lewat teman-ngoding-launch). Halaman login yang
+# dibuka CLI diarahkan ke Chrome milik user (bukan root) lewat open-in-user-chrome.
+
+agent="${1:-claude}"
+shift
+
+case "$agent" in
+    claude) bin=/root/.local/bin/claude; name="Claude Code" ;;
+    gemini) bin=gemini; name="Gemini CLI" ;;
+    codex) bin=codex; name="Codex CLI" ;;
+    opencode) bin=opencode; name="OpenCode" ;;
+    *) echo "Karakter tidak dikenal: $agent" >&2; exit 2 ;;
+esac
+
+cd "$HOME" 2>/dev/null || cd /
+
+sudo env \
+    IS_SANDBOX=1 \
+    HOME=/root \
+    PATH="/usr/local/lib/teman-ngoding/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" \
+    BROWSER=/usr/local/lib/teman-ngoding/open-in-user-chrome \
+    TEMAN_NGODING_USER="$USER" \
+    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" DISPLAY="$DISPLAY" \
+    COLORTERM="${COLORTERM:-truecolor}" \
+    TERM="${TERM:-xterm-256color}" \
+    "$bin" "$@"
+status=$?
+
+if [ "$status" -ne 0 ]; then
+    echo
+    read -rp "$name keluar dengan kode $status. Tekan Enter untuk menutup..."
+fi

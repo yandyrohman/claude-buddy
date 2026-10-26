@@ -9,3 +9,8 @@ debug.json
 *.tmp
 .vscode/
 .idea/
+
+oauth_creds.json
+auth.json
+.env
+__pycache__/

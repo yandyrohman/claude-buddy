@@ -1,4 +1,7 @@
-// Claude Buddy: maskot Clawd bermahkota yang hidup di desktop.
+// Teman Ngoding: maskot piksel yang hidup di desktop. Karakternya bisa diganti
+// (Claude, Gemini, Codex, OpenCode); tiap karakter membuka CLI-nya sendiri.
+// Semua karakter memakai kerangka yang sama (badan 12×5, lengan, 4 kaki, mata,
+// hiasan kepala), jadi semua animasi & adegan berlaku untuk semuanya.
 //
 // Lapisan aktor (luar ke dalam):
 //   actor   – posisi di layar (dianimasikan saat lari), hover/klik/drag; berisi
@@ -27,17 +30,19 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const DEBUG = false;
 
-const LAUNCHER = GLib.build_filenamev([
-    GLib.get_home_dir(), '.local/share/applications/io.claude.buddy.desktop']);
+const APP_NAME = 'Teman Ngoding';
+const LAUNCH_SCRIPT = '/usr/local/bin/teman-ngoding-launch';
 const STATE_FILE = GLib.build_filenamev([
+    GLib.get_user_config_dir(), 'teman-ngoding.json']);
+// Posisi dari versi lama (Claude Buddy), dipakai sekali saat file baru belum ada
+const OLD_STATE_FILE = GLib.build_filenamev([
     GLib.get_user_config_dir(), 'claude-buddy.json']);
 const DEBUG_FILE = GLib.build_filenamev([
-    GLib.get_user_runtime_dir(), 'claude-buddy', 'debug.json']);
-const STATUS_FILE = '/run/claude-buddy/status.json';
-const STATUS_UNIT = 'claude-buddy-status.service';
-const BROWSER_URL = 'https://claude.ai/new';
-const UUID = 'claude-buddy@yandi';
-const SWITCH_SCRIPT = '/usr/local/bin/claude-buddy-switch';
+    GLib.get_user_runtime_dir(), 'teman-ngoding', 'debug.json']);
+const STATUS_FILE = '/run/teman-ngoding/status.json';
+const STATUS_UNIT = 'teman-ngoding-status.service';
+const UUID = 'teman-ngoding@yandi';
+const SWITCH_SCRIPT = '/usr/local/bin/teman-ngoding-switch';
 
 const U = 12; // ukuran satu "piksel" maskot
 const CHAR_W = 16 * U;
@@ -48,15 +53,155 @@ const BUBBLE_MAX_W = 250;
 const TYPE_SPEED = 22; // ms per huruf
 
 const C = {
-    body: '#D97757',
-    eye: '#1F1E1D',
-    gold: '#F2C14E',
-    gem: '#FF7A8A',
     blush: 'rgba(255, 140, 140, 0.7)',
     angry: 'rgba(255, 70, 70, 0.75)',
     ink: '#2b2230', // garis gelembung (lihat stylesheet.css)
     paper: '#fff8ee',
 };
+
+// --- karakter ---------------------------------------------------------------
+//
+// body: warna badan dari atas ke bawah (1–3 titik, digradasi per baris piksel).
+// hat: hiasan kepala [x, y, w, h, rects] dalam satuan U (lihat sprite()); boleh
+//      menjorok ke bawah sampai badan (y = 3).
+// deco: kotak tambahan di atas badan (koordinat relatif badan 12×5).
+// Sisanya teks: nama di menu, URL browser, dan kalimat khas karakter.
+const CHARACTERS = {
+    claude: {
+        name: 'Claude',
+        cli: 'Claude Code',
+        logo: '👑',
+        url: 'https://claude.ai/new',
+        site: 'claude.ai',
+        body: ['#D97757'],
+        eye: '#1F1E1D',
+        hat: [6, 0.5, 4, 2.5, [
+            [0, 1.5, 4, 1, '#F2C14E'],
+            [0, 0.5, 1, 1, '#F2C14E'],
+            [1.5, 0, 1, 1.5, '#F2C14E'],
+            [3, 0.5, 1, 1, '#F2C14E'],
+            [1.75, 0.25, 0.5, 0.5, '#FF7A8A'],
+        ]],
+        color: 'oranye',
+        square: '🟧',
+        hatName: 'Mahkotaku',
+        intro: ['Claude balik bertugas! 👑', 'Raja root kembali~ 👑'],
+        phrases: [
+            'Klik aku buat manggil Claude 👑',
+            'Aku raja root di sini 👑',
+            'Tab atau spasi? Aku sih mahkota 👑',
+        ],
+        sad: ['Mahkotaku kayaknya kegedean 😔'],
+    },
+    gemini: {
+        name: 'Gemini',
+        cli: 'Gemini CLI',
+        logo: '✨',
+        url: 'https://gemini.google.com/app',
+        site: 'gemini.google.com',
+        body: ['#4796E3', '#9177C7', '#CA6673'],
+        eye: '#1B1A33',
+        // bintang empat sudut di atas tangkai
+        hat: [6, -0.6, 4, 3.6, [
+            [1.8, 2.1, 0.4, 1.6, '#6E8FE0'],
+            [1.75, 0, 0.5, 2.6, '#A8C7FA'],
+            [0.7, 1.05, 2.6, 0.5, '#A8C7FA'],
+            [1.5, 0.45, 1, 1.7, '#D2E3FC'],
+            [1.15, 0.8, 1.7, 1, '#D2E3FC'],
+            [1.5, 0.85, 1, 0.9, '#FFFFFF', 45],
+        ]],
+        color: 'biru-ungu',
+        square: '🟦',
+        hatName: 'Bintangku',
+        intro: ['Halo! Aku Gemini ✨', 'Gemini siap meluncur! 🚀✨'],
+        phrases: [
+            'Klik aku buat manggil Gemini ✨',
+            'Bintang di kepalaku nyala terus lho ✨',
+            'Aku kembar? Bukan, aku Gemini ♊',
+            'Konteksku panjang, curhat aja bang 📚',
+            'Gradasi biru-ungu ini asli, bukan filter 💅',
+            'Mau aku cariin sesuatu? 🔎',
+        ],
+        sad: ['Bintangku redup... 🥺'],
+    },
+    codex: {
+        name: 'Codex',
+        cli: 'Codex CLI',
+        logo: '⌨️',
+        url: 'https://chatgpt.com/codex',
+        site: 'chatgpt.com/codex',
+        body: ['#F4F4F2', '#D9D9D4'],
+        eye: '#111111',
+        // layar terminal mini ">_"
+        hat: [6, 0.3, 4, 2.7, [
+            [0, 0, 4, 2.75, '#151515'],
+            [0.3, 0.25, 0.35, 0.35, '#FF5F57'],
+            [0.8, 0.25, 0.35, 0.35, '#FEBC2E'],
+            [1.3, 0.25, 0.35, 0.35, '#28C840'],
+            [0.45, 1.05, 0.75, 0.25, '#FFFFFF', 35],
+            [0.45, 1.5, 0.75, 0.25, '#FFFFFF', -35],
+            [1.5, 1.8, 1.1, 0.28, '#FFFFFF'],
+        ]],
+        color: 'putih',
+        square: '⬜',
+        hatName: 'Layar di kepalaku',
+        intro: ['Codex online >_', 'Halo! Codex siap ngoding ⌨️'],
+        phrases: [
+            'Klik aku buat manggil Codex >_',
+            'Terminal di kepalaku gak pernah tidur >_',
+            'Kasih aku tiket, aku kerjain 🎫',
+            'Sandbox dulu, baru eksekusi 🧪',
+            'Diff-nya rapi kan? 🧹',
+            'Patch dikit, test, beres ⚡',
+        ],
+        sad: ['Layar di kepalaku nge-blank... 🥺'],
+    },
+    opencode: {
+        name: 'OpenCode',
+        cli: 'OpenCode',
+        logo: '🖥️',
+        url: 'https://opencode.ai',
+        site: 'opencode.ai',
+        body: ['#55555C', '#2E2E33'],
+        eye: '#F4F4F5',
+        deco: [[0, 0, 12, 0.35, 'rgba(255, 255, 255, 0.16)']],
+        // kurung kurawal { } dengan kursor berkedip di tengah
+        hat: [5.5, 0.4, 5, 2.6, [
+            ...[[0.5, 0, 0.7, 0.35], [0.25, 0.2, 0.4, 0.95], [0, 1.0, 0.45, 0.4],
+                [0.25, 1.3, 0.4, 0.95], [0.5, 2.1, 0.7, 0.35]]
+                .flatMap(([x, y, w, h]) => [[x, y, w, h, '#ECECEC'], [5 - x - w, y, w, h, '#ECECEC']]),
+            [2.1, 0.75, 0.8, 1.3, '#7CF5C8'],
+        ]],
+        color: 'abu-abu',
+        square: '⬛',
+        hatName: 'Kurung kurawalku',
+        intro: ['OpenCode hadir { }', 'Halo! OpenCode siap ngoding 🖥️'],
+        phrases: [
+            'Klik aku buat manggil OpenCode { }',
+            'Open source dong, kayak hatiku 💚',
+            'Model apa aja aku jabanin 🔌',
+            'Kurung kurawalku selalu berpasangan { }',
+            'Terminal UI-ku cakep lho 🖥️',
+            'Dark mode is my default 🌚',
+        ],
+        sad: ['Kurung kurawalku kehilangan pasangan... 🥺'],
+    },
+};
+const DEFAULT_CHARACTER = 'claude';
+
+// Warna gradasi: n warna yang merata di antara titik-titik `stops`
+function gradient(stops, n) {
+    const rgb = stops.map(s => parseColor(s).slice(0, 3));
+    if (rgb.length === 1)
+        return Array(n).fill(stops[0]);
+    const hex = v => Math.round(v * 255).toString(16).padStart(2, '0');
+    return Array.from({length: n}, (_, i) => {
+        const t = i / (n - 1) * (rgb.length - 1);
+        const k = Math.min(Math.floor(t), rgb.length - 2);
+        const f = t - k;
+        return `#${[0, 1, 2].map(c => hex(rgb[k][c] + (rgb[k + 1][c] - rgb[k][c]) * f)).join('')}`;
+    });
+}
 
 // Gaya mainan, digambar lewat shape() (lihat di bawah)
 const TOY = {
@@ -91,10 +236,8 @@ const M = Clutter.AnimationMode;
 
 const PHRASES = [
     'Ngoding apa hari ini, bang?',
-    'Klik aku buat manggil Claude 👑',
     'Jangan lupa minum air putih ya 💧',
     'Commit dulu, baru ngopi ☕',
-    'Aku raja root di sini 👑',
     'Bug? Bukan bug, itu fitur 🐛',
     'rm -rf /? Eits, jangan dong 😱',
     'Istirahat bentar, matanya kasian 👀',
@@ -111,7 +254,6 @@ const PHRASES = [
     'Tau gak? Aku bisa salto lho 🤸',
     'Deploy hari Jumat? Berani banget 😬',
     'Console.log adalah debugger terbaik 🕵️',
-    'Tab atau spasi? Aku sih mahkota 👑',
     'Semicolon-nya jangan lupa ;',
     'Hari ini produktif banget kayaknya! 📈',
     'Aku lagi mikirin algoritma... 🤔',
@@ -158,18 +300,15 @@ const SAD_PHRASES = [
     'Hiks... test-nya merah semua 😢',
     'Aku kangen diklik... 🥺',
     'Kenapa bug-nya gak mau pergi... 😭',
-    'Mahkotaku kayaknya kegedean 😔',
     'Abang sibuk ya... 🥺',
 ];
 const WEIRD_PHRASES = [
     'blub blub 🐟',
     'Aku adalah kentang 🥔',
-    'Kenapa langit biru? Kenapa aku oranye? 🤔',
     'beep boop 🤖',
     '...?',
     'Aku lupa mau ngapain 😶',
     'Hmm hmm hmm~ 🎵',
-    'Pernah gak sih, kamu ngerasa jadi piksel? 🟧',
     'Kalau aku kotak, berarti aku... kubus? 🧊',
     'nyam nyam nyam 🍙',
 ];
@@ -649,6 +788,9 @@ export class Buddy {
         this._lastScene = 0;
         this._lastInteraction = Date.now();
         this._clicks = [];
+        const saved = this._loadState().character;
+        this._charId = saved in CHARACTERS ? saved : DEFAULT_CHARACTER;
+        this._ch = CHARACTERS[this._charId];
 
         this._build();
         global.window_group.add_child(this._actor);
@@ -665,7 +807,7 @@ export class Buddy {
         try {
             this._sys = new SystemInfo();
         } catch (e) {
-            logError(e, 'claude-buddy: sysinfo');
+            logError(e, 'teman-ngoding: sysinfo');
             this._sys = null;
         }
         this._startIdle();
@@ -699,10 +841,7 @@ export class Buddy {
         }
         this._statusProc?.force_exit();
         this._statusProc = null;
-        this._menu?.destroy();
-        this._statusMenu?.destroy();
-        this._interactMenu?.destroy();
-        this._menu = this._statusMenu = this._interactMenu = this._menuManager = null;
+        this._destroyMenus();
         this._actor?.destroy();
         this._actor = null;
         this._p = null;
@@ -747,7 +886,7 @@ export class Buddy {
 
         // Bayangan tanah: elips kecil yang di-blur lembut
         const ground = new St.Widget({
-            style_class: 'claude-buddy-ground',
+            style_class: 'ngoding-ground',
             width: 10 * U,
             height: Math.round(1.6 * U),
         });
@@ -773,121 +912,19 @@ export class Buddy {
             dark.set_brightness(-1.0);
             dropShadow.add_effect(dark);
         } catch (e) {
-            logError(e, 'claude-buddy: shadow tint');
+            logError(e, 'teman-ngoding: shadow tint');
         }
         this._addBlur(dropShadow, 14);
         p.dropShadow = dropShadow;
-
-        // Kaki & lengan sedikit menyelip di bawah badan, supaya saat miring tidak
-        // tampak garis sambungan di antara kotak.
-        p.legs = [3, 5, 10, 12].map(x => {
-            const leg = sprite(ch, x, 8, 1, 2, [[0, -0.2, 1, 2.2, C.body]]);
-            leg.set_pivot_point(0.5, 0);
-            return leg;
-        });
-
-        p.armL = sprite(ch, 0, 5, 2, 2, [[0, 0, 2.2, 2, C.body]]);
-        p.armL.set_pivot_point(1.0, 0.5);
-
-        p.armR = sprite(ch, 14, 5, 2, 2, [[-0.2, 0, 2.2, 2, C.body]]);
-        p.armR.set_pivot_point(0.0, 0.5);
-
-        px(ch, 2, 3, 12, 5, C.body);
-
-        p.crown = sprite(ch, 6, 0.5, 4, 2.5, [
-            [0, 1.5, 4, 1, C.gold],
-            [0, 0.5, 1, 1, C.gold],
-            [1.5, 0, 1, 1.5, C.gold],
-            [3, 0.5, 1, 1, C.gold],
-            [1.75, 0.25, 0.5, 0.5, C.gem],
-        ]);
-        p.crown.set_pivot_point(0.5, 0.6);
-
-        // --- wajah ---
-        p.faces = {};
-
-        // normal
-        p.eyes = sprite(ch, 4, 3.5, 8, 3, [
-            [1, 0.5, 1, 2, C.eye],
-            [6, 0.5, 1, 2, C.eye],
-        ]);
-        p.eyes.set_pivot_point(0.5, 0.5);
-        p.faces.normal = p.eyes;
-
-        // senang ^ ^
-        p.faces.happy = sprite(ch, 3, 3.5, 10, 3.5, [
-            ...[1.5, 6.5].flatMap(ox => [
-                [ox, 1.5, 0.5, 0.5, C.eye],
-                [ox + 0.5, 1, 1, 0.5, C.eye],
-                [ox + 1.5, 1.5, 0.5, 0.5, C.eye],
-            ]),
-            [0.5, 2.5, 1, 0.5, C.blush],
-            [8.5, 2.5, 1, 0.5, C.blush],
-        ]);
-
-        // diangkat > <
-        p.faces.dizzy = sprite(ch, 3, 3.5, 10, 3.5, [
-            [1.75, 0.5, 0.5, 0.5, C.eye],
-            [2.25, 1, 0.5, 0.5, C.eye],
-            [1.75, 1.5, 0.5, 0.5, C.eye],
-            [7.75, 0.5, 0.5, 0.5, C.eye],
-            [7.25, 1, 0.5, 0.5, C.eye],
-            [7.75, 1.5, 0.5, 0.5, C.eye],
-            [4.5, 2.25, 1, 1, C.eye],
-            [0.5, 2.5, 1, 0.5, C.blush],
-            [8.5, 2.5, 1, 0.5, C.blush],
-        ]);
-
-        // tidur
-        p.faces.sleepy = sprite(ch, 4, 3.5, 8, 3, [
-            [0.75, 1.5, 1.5, 0.5, C.eye],
-            [5.75, 1.5, 1.5, 0.5, C.eye],
-        ]);
-
-        // marah: alis menukik, mulut datar, pipi merah
-        p.faces.angry = sprite(ch, 3, 2.5, 10, 4.5, [
-            [2, 2, 1, 1, C.eye],
-            [7, 2, 1, 1, C.eye],
-            [1.4, 1.0, 1.9, 0.45, C.eye, 25],
-            [6.7, 1.0, 1.9, 0.45, C.eye, -25],
-            [4, 3.3, 2, 0.4, C.eye],
-            [0.4, 3, 1.2, 0.5, C.angry],
-            [8.4, 3, 1.2, 0.5, C.angry],
-        ]);
-
-        // sedih: alis turun, mulut cemberut
-        p.faces.sad = sprite(ch, 3, 2.5, 10, 4.5, [
-            [2, 2.4, 1, 1, C.eye],
-            [7, 2.4, 1, 1, C.eye],
-            [1.4, 1.5, 1.8, 0.4, C.eye, -20],
-            [6.8, 1.5, 1.8, 0.4, C.eye, 20],
-            [4, 3.8, 0.5, 0.4, C.eye],
-            [4.5, 3.5, 1, 0.4, C.eye],
-            [5.5, 3.8, 0.5, 0.4, C.eye],
-        ]);
-
-        // tidak jelas: mata beda ukuran, mulut bergelombang
-        p.faces.weird = sprite(ch, 3, 2.5, 10, 4.5, [
-            [1.6, 1.3, 1.6, 1.6, C.eye],
-            [7.2, 2.1, 0.6, 0.6, C.eye],
-            ...[0, 1, 2, 3, 4].map(i => [3.6 + i * 0.55, i % 2 ? 3.1 : 3.4, 0.55, 0.4, C.eye]),
-        ]);
-
-        // mulut "o" (meniup, kaget)
-        p.mouth = px(ch, 7.5, 6, 1, 1, C.eye);
-
-        for (const [name, f] of Object.entries(p.faces)) {
-            if (name !== 'normal')
-                f.hide();
-        }
-        p.mouth.hide();
+        this._p = p;
+        this._buildCharacter();
 
         // --- gelembung kata-kata (gaya komik-piksel) ---
         const bubble = new St.Widget({opacity: 0, visible: false});
         // Ekor = kotak diputar 45°, digambar halus lewat sprite (ukuran dalam piksel)
         const tailOuter = sprite(bubble, 0, 0, 14 / U, 14 / U, [[0, 0, 14 / U, 14 / U, C.ink]]);
-        const box = new St.Bin({style_class: 'claude-buddy-bubble'});
-        const text = new St.Label({style_class: 'claude-buddy-bubble-text'});
+        const box = new St.Bin({style_class: 'ngoding-bubble'});
+        const text = new St.Label({style_class: 'ngoding-bubble-text'});
         text.clutter_text.line_wrap = true;
         box.set_child(text);
         const tailInner = sprite(bubble, 0, 0, 10 / U, 10 / U, [[0, 0, 10 / U, 10 / U, C.paper]]);
@@ -907,6 +944,180 @@ export class Buddy {
         this._actor.connect('button-release-event', (a, e) => this._onRelease(e));
     }
 
+    // Bagian badan yang khas karakter, digambar ke lapisan `char`. Dipanggil lagi
+    // saat ganti karakter (isi `char` dikosongkan dulu).
+    _buildCharacter() {
+        const p = this._p;
+        const ch = p.char;
+        const def = this._ch;
+        const eye = def.eye;
+        // Satu warna per baris badan (y 3..7); lengan di baris 5–6, kaki di bawah
+        const rows = gradient(def.body, 5);
+        const armColor = rows[2];
+        const legColor = rows[4];
+
+        // Kaki & lengan sedikit menyelip di bawah badan, supaya saat miring tidak
+        // tampak garis sambungan di antara kotak.
+        p.legs = [3, 5, 10, 12].map(x => {
+            const leg = sprite(ch, x, 8, 1, 2, [[0, -0.2, 1, 2.2, legColor]]);
+            leg.set_pivot_point(0.5, 0);
+            return leg;
+        });
+
+        p.armL = sprite(ch, 0, 5, 2, 2, [[0, 0, 2.2, 2, armColor]]);
+        p.armL.set_pivot_point(1.0, 0.5);
+
+        p.armR = sprite(ch, 14, 5, 2, 2, [[-0.2, 0, 2.2, 2, armColor]]);
+        p.armR.set_pivot_point(0.0, 0.5);
+
+        sprite(ch, 2, 3, 12, 5, [
+            ...rows.map((color, i) => [0, i, 12, i < 4 ? 1.05 : 1, color]),
+            ...(def.deco ?? []),
+        ]);
+
+        const [hx, hy, hw, hh, hatRects] = def.hat;
+        p.hat = sprite(ch, hx, hy, hw, hh, hatRects.map(r => [...r]));
+        p.hat.set_pivot_point(0.5, 0.6);
+
+        // --- wajah ---
+        p.faces = {};
+
+        // normal
+        p.eyes = sprite(ch, 4, 3.5, 8, 3, [
+            [1, 0.5, 1, 2, eye],
+            [6, 0.5, 1, 2, eye],
+        ]);
+        p.eyes.set_pivot_point(0.5, 0.5);
+        p.faces.normal = p.eyes;
+
+        // senang ^ ^
+        p.faces.happy = sprite(ch, 3, 3.5, 10, 3.5, [
+            ...[1.5, 6.5].flatMap(ox => [
+                [ox, 1.5, 0.5, 0.5, eye],
+                [ox + 0.5, 1, 1, 0.5, eye],
+                [ox + 1.5, 1.5, 0.5, 0.5, eye],
+            ]),
+            [0.5, 2.5, 1, 0.5, C.blush],
+            [8.5, 2.5, 1, 0.5, C.blush],
+        ]);
+
+        // diangkat > <
+        p.faces.dizzy = sprite(ch, 3, 3.5, 10, 3.5, [
+            [1.75, 0.5, 0.5, 0.5, eye],
+            [2.25, 1, 0.5, 0.5, eye],
+            [1.75, 1.5, 0.5, 0.5, eye],
+            [7.75, 0.5, 0.5, 0.5, eye],
+            [7.25, 1, 0.5, 0.5, eye],
+            [7.75, 1.5, 0.5, 0.5, eye],
+            [4.5, 2.25, 1, 1, eye],
+            [0.5, 2.5, 1, 0.5, C.blush],
+            [8.5, 2.5, 1, 0.5, C.blush],
+        ]);
+
+        // tidur
+        p.faces.sleepy = sprite(ch, 4, 3.5, 8, 3, [
+            [0.75, 1.5, 1.5, 0.5, eye],
+            [5.75, 1.5, 1.5, 0.5, eye],
+        ]);
+
+        // marah: alis menukik, mulut datar, pipi merah
+        p.faces.angry = sprite(ch, 3, 2.5, 10, 4.5, [
+            [2, 2, 1, 1, eye],
+            [7, 2, 1, 1, eye],
+            [1.4, 1.0, 1.9, 0.45, eye, 25],
+            [6.7, 1.0, 1.9, 0.45, eye, -25],
+            [4, 3.3, 2, 0.4, eye],
+            [0.4, 3, 1.2, 0.5, C.angry],
+            [8.4, 3, 1.2, 0.5, C.angry],
+        ]);
+
+        // sedih: alis turun, mulut cemberut
+        p.faces.sad = sprite(ch, 3, 2.5, 10, 4.5, [
+            [2, 2.4, 1, 1, eye],
+            [7, 2.4, 1, 1, eye],
+            [1.4, 1.5, 1.8, 0.4, eye, -20],
+            [6.8, 1.5, 1.8, 0.4, eye, 20],
+            [4, 3.8, 0.5, 0.4, eye],
+            [4.5, 3.5, 1, 0.4, eye],
+            [5.5, 3.8, 0.5, 0.4, eye],
+        ]);
+
+        // tidak jelas: mata beda ukuran, mulut bergelombang
+        p.faces.weird = sprite(ch, 3, 2.5, 10, 4.5, [
+            [1.6, 1.3, 1.6, 1.6, eye],
+            [7.2, 2.1, 0.6, 0.6, eye],
+            ...[0, 1, 2, 3, 4].map(i => [3.6 + i * 0.55, i % 2 ? 3.1 : 3.4, 0.55, 0.4, eye]),
+        ]);
+
+        // mulut "o" (meniup, kaget)
+        p.mouth = px(ch, 7.5, 6, 1, 1, eye);
+
+        for (const [name, f] of Object.entries(p.faces)) {
+            if (name !== 'normal')
+                f.hide();
+        }
+        p.mouth.hide();
+    }
+
+    // --- karakter & kalimat ------------------------------------------------
+
+    _phrases() {
+        return [...PHRASES, ...this._ch.phrases];
+    }
+
+    _weirdPhrases() {
+        return [
+            ...WEIRD_PHRASES,
+            `Kenapa langit biru? Kenapa aku ${this._ch.color}? 🤔`,
+            `Pernah gak sih, kamu ngerasa jadi piksel? ${this._ch.square}`,
+        ];
+    }
+
+    _switchCharacter(id) {
+        if (!(id in CHARACTERS) || id === this._charId || this._switching)
+            return;
+        this._interrupt();
+        this._switching = true;
+        this._busy = true;
+        const p = this._p;
+        this._sayNow(pick(['Ganti kostum dulu ya~ 🎭', 'Sim salabim! ✨', 'Tunggu bentar, ganti baju 👕']));
+        this._later(700, () => {
+            // berputar sambil mengecil, ganti badan, lalu muncul lagi
+            p.bounce.set_pivot_point(0.5, 0.55);
+            p.bounce.ease({rotation_angle_y: 90, scale_x: 0.6, scale_y: 0.6, duration: 260, mode: M.EASE_IN_QUAD,
+                onComplete: () => {
+                    if (!this._p)
+                        return;
+                    this._floatLabel('💨', 'ngoding-pop', 6 * U, 3 * U, {dy: -20, duration: 700});
+                    this._charId = id;
+                    this._ch = CHARACTERS[id];
+                    this._saveState({character: id});
+                    for (const a of [p.armL, p.armR, p.hat, ...p.legs, ...Object.values(p.faces), p.mouth])
+                        a.remove_all_transitions();
+                    p.char.remove_all_transitions();
+                    p.char.destroy_all_children();
+                    this._buildCharacter();
+                    this._destroyMenus();
+                    this._exhausted = false;
+                    this._simulated = false;
+                    this._cancel(this._snoreId);
+                    p.bounce.set({rotation_angle_y: -90});
+                    p.bounce.ease({rotation_angle_y: 0, scale_x: 1, scale_y: 1, duration: 360, mode: M.EASE_OUT_BACK,
+                        onComplete: () => {
+                            if (!this._p)
+                                return;
+                            p.bounce.set_pivot_point(0.5, 1.0);
+                            this._switching = false;
+                            this._busy = false;
+                            this._resetPose();
+                            this._sayNow(pick(this._ch.intro));
+                            this._later(300, () => this._excited());
+                            this._later(2500, () => this._checkLimit());
+                        }});
+                }});
+        });
+    }
+
     _addBlur(actor, radius) {
         try {
             actor.add_effect(new Shell.BlurEffect({
@@ -915,7 +1126,7 @@ export class Buddy {
                 brightness: 1.0,
             }));
         } catch (e) {
-            logError(e, 'claude-buddy: blur');
+            logError(e, 'teman-ngoding: blur');
         }
     }
 
@@ -1052,27 +1263,37 @@ export class Buddy {
             wg.set_child_above_sibling(this._actor, kids[bg]);
     }
 
-    _loadPosition() {
-        try {
-            const [ok, bytes] = GLib.file_get_contents(STATE_FILE);
-            if (ok) {
-                const data = JSON.parse(new TextDecoder().decode(bytes));
-                if (Number.isFinite(data.x) && Number.isFinite(data.y))
-                    return data;
+    // State tersimpan: {x, y, character}
+    _loadState() {
+        for (const file of [STATE_FILE, OLD_STATE_FILE]) {
+            try {
+                const [ok, bytes] = GLib.file_get_contents(file);
+                if (ok)
+                    return JSON.parse(new TextDecoder().decode(bytes)) ?? {};
+            } catch {
+                // belum pernah disimpan
             }
-        } catch {
-            // belum pernah disimpan
         }
-        return null;
+        return {};
+    }
+
+    _saveState(patch) {
+        try {
+            const data = {...this._loadState(), ...patch};
+            GLib.file_set_contents(STATE_FILE, JSON.stringify(data));
+        } catch (e) {
+            logError(e, 'teman-ngoding: save state');
+        }
+    }
+
+    _loadPosition() {
+        const data = this._loadState();
+        return Number.isFinite(data.x) && Number.isFinite(data.y) ? data : null;
     }
 
     _savePosition() {
-        try {
-            const [x, y] = this._actor.get_position();
-            GLib.file_set_contents(STATE_FILE, JSON.stringify({x, y}));
-        } catch (e) {
-            logError(e, 'claude-buddy: save position');
-        }
+        const [x, y] = this._actor.get_position();
+        this._saveState({x, y, character: this._charId});
     }
 
     _debugLoop() {
@@ -1109,7 +1330,7 @@ export class Buddy {
                     windowGroup: kids,
                 }, null, 1));
             } catch (e) {
-                logError(e, 'claude-buddy: debug');
+                logError(e, 'teman-ngoding: debug');
             }
             this._debugLoop();
         });
@@ -1205,8 +1426,8 @@ export class Buddy {
         });
         p.eyes.remove_all_transitions();
         p.eyes.set({scale_y: 1, translation_x: 0});
-        p.crown.remove_all_transitions();
-        p.crown.set({translation_y: 0, rotation_angle_y: 0, rotation_angle_z: 0});
+        p.hat.remove_all_transitions();
+        p.hat.set({translation_y: 0, rotation_angle_y: 0, rotation_angle_z: 0});
         this._breathe();
         this._armsIdle();
         this._startFloat();
@@ -1276,7 +1497,7 @@ export class Buddy {
 
     _wasTurnedOff() {
         // Penanda "pernah dimatikan lewat menu" disimpan di file posisi
-        const flag = GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-buddy-was-off']);
+        const flag = GLib.build_filenamev([GLib.get_user_cache_dir(), 'teman-ngoding-was-off']);
         const was = GLib.file_test(flag, GLib.FileTest.EXISTS);
         if (was)
             Gio.File.new_for_path(flag).delete(null);
@@ -1459,11 +1680,11 @@ export class Buddy {
                 }),
             }),
         });
-        this._p.crown.ease({
+        this._p.hat.ease({
             translation_y: -0.6 * U,
             duration: 170,
             mode: M.EASE_OUT_QUAD,
-            onComplete: () => this._p?.crown.ease({
+            onComplete: () => this._p?.hat.ease({
                 translation_y: 0,
                 duration: 300,
                 mode: M.EASE_OUT_BOUNCE,
@@ -1581,13 +1802,13 @@ export class Buddy {
         this._setFace('happy');
         if (chance(2))
             this._say(pick(EXCITED_PHRASES));
-        this._p.crown.ease({
+        this._p.hat.ease({
             rotation_angle_y: 360,
             duration: 600,
             mode: M.EASE_OUT_QUAD,
             onComplete: () => {
                 if (this._p)
-                    this._p.crown.rotation_angle_y = 0;
+                    this._p.hat.rotation_angle_y = 0;
             },
         });
         this._hop(3.6 * U, () => this._later(500, () => this._setFace(this._restingFace())));
@@ -1623,7 +1844,7 @@ export class Buddy {
         };
         for (let i = 0; i < 3; i++) {
             this._later(i * 350, () => alive() && this._floatLabel(i === 0 ? '💢' : '💨',
-                'claude-buddy-emote', rand(1, 13) * U, 0, {dy: -45, duration: 900}));
+                'ngoding-emote', rand(1, 13) * U, 0, {dy: -45, duration: 900}));
         }
         shake();
     }
@@ -1632,14 +1853,14 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         this._setFace('sad');
-        this._say(text ?? pick(SAD_PHRASES));
+        this._say(text ?? pick([...SAD_PHRASES, ...this._ch.sad]));
         p.char.remove_all_transitions();
         p.char.ease({scale_y: 0.9, scale_x: 1.04, duration: 700, mode: M.EASE_IN_OUT_SINE});
         p.armL.remove_all_transitions();
         p.armR.remove_all_transitions();
         p.armL.ease({rotation_angle_z: -30, duration: 600});
         p.armR.ease({rotation_angle_z: 30, duration: 600});
-        p.crown.ease({rotation_angle_z: -12, translation_y: 0.3 * U, duration: 600});
+        p.hat.ease({rotation_angle_z: -12, translation_y: 0.3 * U, duration: 600});
         let n = 0;
         const tear = () => {
             if (!alive())
@@ -1662,7 +1883,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         this._setFace('weird');
-        this._say(pick(WEIRD_PHRASES));
+        this._say(pick(this._weirdPhrases()));
         const variant = rand(0, stayInPlace ? 2 : 3);
         if (variant === 0) {
             // berputar pelan di tempat
@@ -1737,12 +1958,12 @@ export class Buddy {
             if (m && m.pct >= 90 && once('ram'))
                 this._say(`RAM kepake ${m.pct}%! Tutup beberapa tab yuk 😵`);
         } catch (e) {
-            logError(e, 'claude-buddy: check system');
+            logError(e, 'teman-ngoding: check system');
         }
     }
 
     _limitHit() {
-        const u = this._readStatus()?.usage;
+        const u = this._usage();
         if (!u)
             return null;
         const hit = [['sesi', u.session], ['mingguan', u.weekly]]
@@ -1761,7 +1982,7 @@ export class Buddy {
 
     _limitLevel() {
         // Limit paling tinggi di antara sesi & mingguan
-        const u = this._readStatus()?.usage;
+        const u = this._usage();
         if (!u)
             return null;
         const parts = [['sesi', u.session], ['mingguan', u.weekly]].filter(([, v]) => v);
@@ -1807,12 +2028,12 @@ export class Buddy {
         const fact = () => this._sys?.randomPhrase() ?? null;
         if (low) {
             if (r < 45)
-                return fact() ?? this._complaint() ?? pick(PHRASES);
+                return fact() ?? this._complaint() ?? pick(this._phrases());
             if (r < 80)
-                return this._complaint() ?? fact() ?? pick(PHRASES);
-            return pick(PHRASES);
+                return this._complaint() ?? fact() ?? pick(this._phrases());
+            return pick(this._phrases());
         }
-        return (r < 55 ? fact() : null) ?? pick(PHRASES);
+        return (r < 55 ? fact() : null) ?? pick(this._phrases());
     }
 
     _yawn() {
@@ -1879,7 +2100,7 @@ export class Buddy {
         p.char.set_pivot_point(0.5, 1.0);
         p.char.set({scale_x: 1, scale_y: 1});
         this._loop(p.char, {scale_y: 0.9, scale_x: 1.05}, 1600);
-        p.crown.ease({rotation_angle_z: -14, translation_y: 0.3 * U, duration: 400});
+        p.hat.ease({rotation_angle_z: -14, translation_y: 0.3 * U, duration: 400});
         p.armL.remove_all_transitions();
         p.armR.remove_all_transitions();
         p.armL.ease({rotation_angle_z: -25, duration: 400});
@@ -1890,7 +2111,7 @@ export class Buddy {
         if (!this._exhausted)
             return;
         if (!this._sceneToken && this._state !== 'drag') {
-            this._floatLabel(chance(3) ? 'Z' : 'z', 'claude-buddy-z', rand(11, 13) * U, U,
+            this._floatLabel(chance(3) ? 'Z' : 'z', 'ngoding-z', rand(11, 13) * U, U,
                 {dx: rand(10, 30), dy: -60, duration: 1700});
         }
         this._snoreId = this._later(900, () => this._snore());
@@ -1908,7 +2129,7 @@ export class Buddy {
             'Hmph! Ganggu orang tidur aja 😤',
             when ? `Limit reset ${when}, sabar dong! 😡` : 'Sabar dong, limitnya belum reset! 😡',
         ]));
-        this._floatLabel('💢', 'claude-buddy-emote', rand(10, 14) * U, 0, {dy: -45, duration: 900});
+        this._floatLabel('💢', 'ngoding-emote', rand(10, 14) * U, 0, {dy: -45, duration: 900});
         let n = 0;
         const shake = () => {
             if (!alive())
@@ -1968,7 +2189,7 @@ export class Buddy {
         const dust = () => {
             if (!this._moving)
                 return;
-            this._floatLabel('💨', 'claude-buddy-dust',
+            this._floatLabel('💨', 'ngoding-dust',
                 dir > 0 ? 0 : CHAR_W - 2 * U, CHAR_H - 2 * U,
                 {dx: -dir * 20, dy: -6, duration: 500});
             this._dustId = this._later(240, dust);
@@ -2138,7 +2359,7 @@ export class Buddy {
                     if (!alive())
                         return;
                     this._setFace('normal');
-                    // muncul pelan, hanya mahkota & mata
+                    // muncul pelan, hanya hiasan kepala & mata
                     this._actor.ease({
                         y: bottom - Math.round(6.6 * U), duration: 700, mode: M.EASE_OUT_QUAD,
                         onComplete: () => {
@@ -2313,7 +2534,7 @@ export class Buddy {
                     p.armR.remove_all_transitions();
                     p.armR.ease({rotation_angle_z: -60, duration: 100,
                         onComplete: () => p.armR.ease({rotation_angle_z: -20, duration: 100})});
-                    this._floatLabel('tok', 'claude-buddy-count', rand(10, 14) * U, rand(1, 4) * U,
+                    this._floatLabel('tok', 'ngoding-count', rand(10, 14) * U, rand(1, 4) * U,
                         {dy: -20, duration: 500});
                     if (++n < 4) {
                         this._later(320, knock);
@@ -2418,7 +2639,7 @@ export class Buddy {
                 mode: M.EASE_OUT_BOUNCE});
             for (let i = 0; i < 4; i++) {
                 this._later(800 + i * 700, () => alive() && this._floatLabel(i % 2 ? 'z' : 'Z',
-                    'claude-buddy-z', 8 * U, 2 * U, {dx: 20, dy: -50, duration: 1400}));
+                    'ngoding-z', 8 * U, 2 * U, {dx: 20, dy: -50, duration: 1400}));
             }
             this._later(4000, () => {
                 if (!alive())
@@ -2697,7 +2918,7 @@ export class Buddy {
         const hx = 15 * U;
         const hy = 6 * U;
         const yoyoSize = 2 * U;
-        const string = this._prop({style_class: 'claude-buddy-string', width: 2, height: 1}, hx, hy);
+        const string = this._prop({style_class: 'ngoding-string', width: 2, height: 1}, hx, hy);
         const yoyo = this._prop(shape(yoyoSize, yoyoSize, TOY.yoyo), hx - yoyoSize / 2 + 1, hy - yoyoSize / 2);
         yoyo.set_pivot_point(0.5, 0.5);
         p.armR.remove_all_transitions();
@@ -2788,7 +3009,7 @@ export class Buddy {
         laptop.add_child(base);
         const lines = [];
         for (let i = 0; i < 3; i++) {
-            const line = new St.Widget({style_class: 'claude-buddy-code-line', width: 1, height: Math.round(0.35 * U)});
+            const line = new St.Widget({style_class: 'ngoding-code-line', width: 1, height: Math.round(0.35 * U)});
             line.set_position(Math.round(0.7 * U), Math.round(0.7 * U + i * 0.8 * U));
             screen.add_child(line);
             lines.push(line);
@@ -2820,7 +3041,7 @@ export class Buddy {
             if (line.width >= 6 * U - 12)
                 line.width = 1;
             if (t % 4 === 0)
-                this._floatLabel(pick(glyphs), 'claude-buddy-glyph', rand(2, 12) * U, 2 * U);
+                this._floatLabel(pick(glyphs), 'ngoding-glyph', rand(2, 12) * U, 2 * U);
             if (t < 26)
                 this._later(140, type);
             else
@@ -2839,7 +3060,7 @@ export class Buddy {
         const z = () => {
             if (!alive())
                 return;
-            this._floatLabel(n % 3 === 2 ? 'Z' : 'z', 'claude-buddy-z', 12 * U, U,
+            this._floatLabel(n % 3 === 2 ? 'Z' : 'z', 'ngoding-z', 12 * U, U,
                 {dx: rand(10, 30), dy: -60, duration: 1600});
             n++;
             if (n < 9) {
@@ -2888,7 +3109,7 @@ export class Buddy {
             p.armR.ease({rotation_angle_z: n % 2 ? 25 : -15, duration: 150, mode: M.EASE_IN_OUT_QUAD});
             p.bounce.ease({rotation_angle_z: n % 4 < 2 ? -4 : 4, duration: 300, mode: M.EASE_IN_OUT_SINE});
             if (n % 2 === 0) {
-                this._floatLabel(pick(['♪', '♫', '♬', '♩']), 'claude-buddy-note',
+                this._floatLabel(pick(['♪', '♫', '♬', '♩']), 'ngoding-note',
                     rand(2, 13) * U, 2 * U,
                     {dx: rand(-30, 30), dy: -rand(60, 100), duration: 1500,
                         style: `color: ${pick(colors)};`});
@@ -2925,7 +3146,7 @@ export class Buddy {
             if (!alive())
                 return;
             const [mx, my] = mug.get_position();
-            this._floatLabel('~', 'claude-buddy-steam',
+            this._floatLabel('~', 'ngoding-steam',
                 mx + mug.translation_x + rand(2, 14), my + mug.translation_y - 10,
                 {dx: rand(-8, 8), dy: -40, duration: 1100});
             this._steamId = this._later(260, steam);
@@ -2970,7 +3191,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const dir = chance(2) ? 1 : -1;
-        const plane = this._propLabel('✈️', 'claude-buddy-plane',
+        const plane = this._propLabel('✈️', 'ngoding-plane',
             dir > 0 ? 14 * U : -1 * U, 3 * U);
         plane.set_pivot_point(0.5, 0.5);
         plane.set({opacity: 0, scale_x: dir, rotation_angle_z: -15 * dir});
@@ -3046,7 +3267,7 @@ export class Buddy {
             });
             jumps++;
             if (jumps % 2 === 0 && chance(2))
-                this._floatLabel(`${jumps}!`, 'claude-buddy-count', 12 * U, 0, {dy: -40, duration: 700});
+                this._floatLabel(`${jumps}!`, 'ngoding-count', 12 * U, 0, {dy: -40, duration: 700});
             if (jumps < total) {
                 this._later(620, turn);
             } else {
@@ -3091,7 +3312,7 @@ export class Buddy {
             ball.ease({scale_x: 1.4, scale_y: 1.4, opacity: 0, duration: 120, mode: M.EASE_OUT_QUAD});
             string.ease({opacity: 0, translation_y: 2 * U, duration: 400});
             const [bx, by] = balloon.get_position();
-            this._floatLabel('💥', 'claude-buddy-pop', bx - 4, by - 6, {dy: -10, duration: 600});
+            this._floatLabel('💥', 'ngoding-pop', bx - 4, by - 6, {dy: -10, duration: 600});
             this._setFace('dizzy');
             p.bounce.ease({
                 translation_y: -2 * U,
@@ -3225,7 +3446,7 @@ export class Buddy {
         const wand = this._prop({width: 4 * U, height: 2 * U}, 14.5 * U, 3 * U);
         const stick = shape(3.4 * U, 0.35 * U, TOY.wand);
         stick.set_position(0, Math.round(0.8 * U));
-        const tip = new St.Label({text: '⭐', style_class: 'claude-buddy-star'});
+        const tip = new St.Label({text: '⭐', style_class: 'ngoding-star'});
         tip.set_position(Math.round(3 * U), 0);
         wand.add_child(stick);
         wand.add_child(tip);
@@ -3241,7 +3462,7 @@ export class Buddy {
             wand.ease({rotation_angle_z: n % 2 ? -70 : -10, duration: 200, mode: M.EASE_IN_OUT_QUAD});
             p.armR.ease({rotation_angle_z: n % 2 ? -50 : -10, duration: 200});
             for (let i = 0; i < 3; i++) {
-                this._floatLabel(pick(['✨', '⭐', '💫']), 'claude-buddy-sparkle',
+                this._floatLabel(pick(['✨', '⭐', '💫']), 'ngoding-sparkle',
                     rand(12, 20) * U, rand(-2, 4) * U,
                     {dx: rand(-40, 40), dy: -rand(20, 60), duration: 800});
             }
@@ -3250,7 +3471,7 @@ export class Buddy {
                 return;
             }
             const prize = pick(['🐰', '🕊️', '🌹', '🍩', '🐱']);
-            const pop = this._propLabel(prize, 'claude-buddy-prize', 7 * U, -2 * U);
+            const pop = this._propLabel(prize, 'ngoding-prize', 7 * U, -2 * U);
             pop.set_pivot_point(0.5, 0.5);
             pop.set({scale_x: 0.1, scale_y: 0.1});
             pop.ease({scale_x: 1, scale_y: 1, duration: 300, mode: M.EASE_OUT_BACK});
@@ -3325,7 +3546,7 @@ export class Buddy {
             if (!alive())
                 return;
             this._setFace('happy');
-            const peace = this._propLabel('✌️', 'claude-buddy-prize', -1.5 * U, 2 * U);
+            const peace = this._propLabel('✌️', 'ngoding-prize', -1.5 * U, 2 * U);
             peace.set_pivot_point(0.5, 0.5);
             peace.set({scale_x: 0.2, scale_y: 0.2});
             peace.ease({scale_x: 1, scale_y: 1, duration: 200, mode: M.EASE_OUT_BACK});
@@ -3595,7 +3816,7 @@ export class Buddy {
             this._moodAngry('Jangan diklik-klik terus! 😤');
             return Clutter.EVENT_STOP;
         }
-        this._sayNow(pick(['Mau ngapain, bang? 😄', 'Siap melayani! 👑', 'Pilih satu ya~ 👇']));
+        this._sayNow(pick(['Mau ngapain, bang? 😄', `Siap melayani! ${this._ch.logo}`, 'Pilih satu ya~ 👇']));
         this._hop(1.6 * U);
         this._openMenu();
         return Clutter.EVENT_STOP;
@@ -3663,7 +3884,7 @@ export class Buddy {
 
     _hearts(n = 4, symbol = '💕') {
         for (let i = 0; i < n; i++) {
-            this._later(i * 220, () => this._sceneToken && this._floatLabel(symbol, 'claude-buddy-emote',
+            this._later(i * 220, () => this._sceneToken && this._floatLabel(symbol, 'ngoding-emote',
                 rand(2, 13) * U, rand(0, 3) * U, {dx: rand(-20, 20), dy: -rand(50, 80), duration: 1200}));
         }
     }
@@ -3675,7 +3896,7 @@ export class Buddy {
         const food = pick(['🍙', '🍩', '🍕', '🍪', '🍜', '🍰', '🍗', '🍫']);
         this._sayNow(pick(['Wah makanan! 🤤', 'Buat aku? Asik! 😍']));
         this._setFace('happy');
-        const f = this._propLabel(food, 'claude-buddy-prize', 6.6 * U, -8 * U);
+        const f = this._propLabel(food, 'ngoding-prize', 6.6 * U, -8 * U);
         f.set_pivot_point(0.5, 0.5);
         f.opacity = 0;
         f.ease({opacity: 255, translation_y: 12.5 * U, rotation_angle_z: 20, duration: 650, mode: M.EASE_IN_QUAD,
@@ -3692,7 +3913,7 @@ export class Buddy {
                     p.char.ease({scale_y: 0.88, scale_x: 1.08, duration: 110, mode: M.EASE_OUT_QUAD,
                         onComplete: () => p.char.ease({scale_y: 1, scale_x: 1, duration: 110})});
                     p.mouth.visible = n % 2 === 0;
-                    this._floatLabel('·', 'claude-buddy-crumb', rand(6, 10) * U, 6 * U,
+                    this._floatLabel('·', 'ngoding-crumb', rand(6, 10) * U, 6 * U,
                         {dx: rand(-20, 20), dy: 20, duration: 500});
                     if (++n < 6) {
                         this._later(240, chomp);
@@ -3716,7 +3937,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         this._stopFloat();
-        const hand = this._propLabel('🤚', 'claude-buddy-hand', 6 * U, -4.5 * U);
+        const hand = this._propLabel('🤚', 'ngoding-hand', 6 * U, -4.5 * U);
         hand.set_pivot_point(0.5, 1.0);
         hand.opacity = 0;
         hand.ease({opacity: 255, duration: 200});
@@ -3725,7 +3946,7 @@ export class Buddy {
         // badan meleleh
         p.char.remove_all_transitions();
         p.char.ease({scale_y: 0.9, scale_x: 1.06, duration: 400, mode: M.EASE_OUT_QUAD});
-        p.crown.ease({translation_y: 0.4 * U, duration: 300});
+        p.hat.ease({translation_y: 0.4 * U, duration: 300});
         let n = 0;
         const pat = () => {
             if (!alive())
@@ -3734,7 +3955,7 @@ export class Buddy {
                 duration: 230, mode: M.EASE_IN_OUT_SINE});
             p.bounce.ease({rotation_angle_z: n % 2 ? -3 : 3, duration: 230});
             if (n % 2 === 0)
-                this._floatLabel('💕', 'claude-buddy-emote', rand(3, 12) * U, rand(0, 3) * U,
+                this._floatLabel('💕', 'ngoding-emote', rand(3, 12) * U, rand(0, 3) * U,
                     {dy: -60, duration: 1100});
             if (++n < 10) {
                 this._later(240, pat);
@@ -3753,7 +3974,7 @@ export class Buddy {
         const alive = this._startScene();
         const p = this._p;
         const side = chance(2) ? 1 : -1;
-        const hand = this._propLabel('🤏', 'claude-buddy-hand',
+        const hand = this._propLabel('🤏', 'ngoding-hand',
             side > 0 ? 13 * U : -0.5 * U, 4.5 * U);
         hand.opacity = 0;
         hand.ease({opacity: 255, duration: 150});
@@ -3780,7 +4001,7 @@ export class Buddy {
                         this._setFace(chance(2) ? 'sad' : 'angry');
                         this._sayNow(pick(['Hmph, aku ngambek 😤', 'Jahat... 🥺', 'Nanti aku bales lho 😠']));
                         p.bounce.ease({rotation_angle_z: -12 * side, duration: 300});
-                        this._floatLabel(pick(['💢', '💧']), 'claude-buddy-emote', 12 * U, 0, {dy: -40, duration: 900});
+                        this._floatLabel(pick(['💢', '💧']), 'ngoding-emote', 12 * U, 0, {dy: -40, duration: 900});
                         this._later(2200, () => alive() && this._endScene());
                     });
                 }});
@@ -3800,7 +4021,7 @@ export class Buddy {
             onComplete: () => {
                 if (!alive())
                     return;
-                this._floatLabel('CTAR!', 'claude-buddy-ctar', 9 * U, -U, {dy: -20, duration: 600});
+                this._floatLabel('CTAR!', 'ngoding-ctar', 9 * U, -U, {dy: -20, duration: 600});
                 whip.ease({opacity: 0, duration: 200});
                 // kaget: lompat & gemetar
                 this._setFace('dizzy');
@@ -3842,12 +4063,13 @@ export class Buddy {
     _launchSwitch() {
         try {
             const proc = Gio.Subprocess.new(
-                ['ptyxis', '--new-window', '--title=Claude Buddy – Ganti Akun', '-x', SWITCH_SCRIPT],
+                ['ptyxis', '--new-window', `--title=${APP_NAME} – Ganti Akun ${this._ch.name}`,
+                    '-x', `${SWITCH_SCRIPT} ${this._charId}`],
                 Gio.SubprocessFlags.NONE);
             proc.wait_async(null, null);
         } catch (e) {
-            logError(e, 'claude-buddy: switch account');
-            Main.notify('Claude Buddy', 'Tidak bisa membuka jendela ganti akun');
+            logError(e, 'teman-ngoding: switch account');
+            Main.notify(APP_NAME, 'Tidak bisa membuka jendela ganti akun');
         }
     }
 
@@ -3858,16 +4080,16 @@ export class Buddy {
         this._cancel(this._snoreId);
         this._goingAway = true;
         try {
-            GLib.file_set_contents(GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-buddy-was-off']), '1');
+            GLib.file_set_contents(GLib.build_filenamev([GLib.get_user_cache_dir(), 'teman-ngoding-was-off']), '1');
         } catch (e) {
-            logError(e, 'claude-buddy: flag');
+            logError(e, 'teman-ngoding: flag');
         }
         const alive = this._startScene();
         const p = this._p;
         this._stopFloat();
         this._setFace('sad');
         this._sayNow(pick(['Hiks... abang mau matiin aku? 🥺', 'Yah... aku disuruh pergi ya? 🥺']));
-        p.crown.ease({rotation_angle_z: -15, translation_y: 0.3 * U, duration: 400});
+        p.hat.ease({rotation_angle_z: -15, translation_y: 0.3 * U, duration: 400});
         p.armL.remove_all_transitions();
         p.armR.remove_all_transitions();
         p.armL.ease({rotation_angle_z: -35, duration: 400});
@@ -3890,7 +4112,7 @@ export class Buddy {
                     mode: M.EASE_IN_QUAD, onComplete: () => t.destroy()});
             }
             if (n % 3 === 0)
-                this._floatLabel(pick(['hiks', 'hiks..', 'huhu']), 'claude-buddy-sob', rand(1, 12) * U, 0,
+                this._floatLabel(pick(['hiks', 'hiks..', 'huhu']), 'ngoding-sob', rand(1, 12) * U, 0,
                     {dy: -40, duration: 1000});
             n++;
             if (n === 8)
@@ -3905,7 +4127,7 @@ export class Buddy {
             this._later(600, () => {
                 if (!alive())
                     return;
-                this._floatLabel('💨', 'claude-buddy-pop', 6 * U, 3 * U, {dy: -20, duration: 700});
+                this._floatLabel('💨', 'ngoding-pop', 6 * U, 3 * U, {dy: -20, duration: 700});
                 this._actor.set_pivot_point(0.5, 0.75);
                 this._actor.ease({scale_x: 0.05, scale_y: 0.05, opacity: 0, rotation_angle_z: 90,
                     duration: 600, mode: M.EASE_IN_BACK,
@@ -3913,7 +4135,7 @@ export class Buddy {
                         try {
                             Main.extensionManager.disableExtension(UUID);
                         } catch (e) {
-                            logError(e, 'claude-buddy: disable');
+                            logError(e, 'teman-ngoding: disable');
                             this._actor?.hide();
                         }
                     }});
@@ -3924,38 +4146,52 @@ export class Buddy {
 
     // --- menu klik & status -----------------------------------------------
 
+    _destroyMenus() {
+        this._menu?.destroy();
+        this._statusMenu?.destroy();
+        this._menu = this._statusMenu = this._menuManager = null;
+    }
+
     _ensureMenus() {
         if (this._menu)
             return;
+        const ch = this._ch;
+        const theme = `ngoding-theme-${this._charId}`;
         this._menuManager = new PopupMenu.PopupMenuManager(this._actor);
 
         this._menu = new PopupMenu.PopupMenu(this._actor, 0.5, St.Side.TOP);
-        this._menu.actor.add_style_class_name('claude-buddy-menu');
+        this._menu.actor.add_style_class_name('ngoding-menu');
+        this._menu.actor.add_style_class_name(theme);
         Main.uiGroup.add_child(this._menu.actor);
         this._menu.actor.hide();
         this._menuManager.addMenu(this._menu);
 
-        // Panel utama: satu kartu berisi header, 3 tombol besar, dan ikon interaksi
+        // Panel utama: satu kartu berisi header, pilihan karakter, 3 tombol besar,
+        // dan ikon interaksi
         const homeCard = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false,
-            style_class: 'claude-buddy-home-item'});
+            style_class: 'ngoding-home-item'});
         const home = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
-            style_class: 'claude-buddy-home', x_expand: true});
+            style_class: 'ngoding-home', x_expand: true});
         homeCard.add_child(home);
         this._menu.addMenuItem(homeCard);
 
         // Header
-        const header = new St.BoxLayout({style_class: 'claude-buddy-home-header'});
-        header.add_child(new St.Label({text: '👑', style_class: 'claude-buddy-home-logo',
+        const header = new St.BoxLayout({style_class: 'ngoding-home-header'});
+        header.add_child(new St.Label({text: ch.logo, style_class: 'ngoding-home-logo',
             y_align: Clutter.ActorAlign.CENTER}));
         const htexts = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
             x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        htexts.add_child(new St.Label({text: 'Claude Buddy', style_class: 'claude-buddy-home-title'}));
-        this._homeSub = new St.Label({text: 'Mau ngapain, bang?', style_class: 'claude-buddy-home-sub'});
+        htexts.add_child(new St.Label({text: ch.name, style_class: 'ngoding-home-title'}));
+        this._homeSub = new St.Label({text: 'Mau ngapain, bang?', style_class: 'ngoding-home-sub'});
         htexts.add_child(this._homeSub);
         header.add_child(htexts);
-        this._homePlan = new St.Label({style_class: 'claude-buddy-status-plan',
+        this._homePlan = new St.Label({style_class: 'ngoding-status-plan',
             y_align: Clutter.ActorAlign.CENTER, visible: false});
         header.add_child(this._homePlan);
+        // Tombol kecil untuk membuka pilihan karakter
+        const swap = new St.Button({style_class: 'ngoding-swap', label: '⇄', can_focus: true,
+            track_hover: true, y_align: Clutter.ActorAlign.CENTER});
+        header.add_child(swap);
         home.add_child(header);
 
         const closeThen = fn => {
@@ -3963,40 +4199,72 @@ export class Buddy {
             this._later(150, fn);
         };
 
+        // Pilihan karakter (tersembunyi sampai tombol ⇄ ditekan)
+        const picker = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'ngoding-picker', visible: false});
+        picker.add_child(new St.Label({text: 'GANTI TEMAN', style_class: 'ngoding-section'}));
+        const chips = new St.BoxLayout({style_class: 'ngoding-chips'});
+        for (const [id, def] of Object.entries(CHARACTERS)) {
+            const active = id === this._charId;
+            const chip = new St.Button({
+                style_class: `ngoding-chip ngoding-chip-${id}${active ? ' ngoding-chip-active' : ''}`,
+                can_focus: true, track_hover: true, x_expand: true, reactive: !active,
+            });
+            const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
+                x_align: Clutter.ActorAlign.CENTER, x_expand: true});
+            box.add_child(new St.Label({text: def.logo, style_class: 'ngoding-chip-emoji',
+                x_align: Clutter.ActorAlign.CENTER}));
+            box.add_child(new St.Label({text: def.name, style_class: 'ngoding-chip-label',
+                x_align: Clutter.ActorAlign.CENTER}));
+            chip.set_child(box);
+            chip.connect('clicked', () => closeThen(() => this._switchCharacter(id)));
+            chips.add_child(chip);
+        }
+        picker.add_child(chips);
+        home.add_child(picker);
+        swap.connect('clicked', () => {
+            picker.visible = !picker.visible;
+            swap.checked = picker.visible;
+            if (picker.visible)
+                this._sayNow(pick(['Mau ganti teman? 🥺', 'Pilih siapa nih? 👀', 'Aku diganti?! ... oke deh 😔']));
+        });
+        this._picker = picker;
+        this._swap = swap;
+
         // Tombol utama
-        const tiles = new St.BoxLayout({style_class: 'claude-buddy-tiles'});
+        const tiles = new St.BoxLayout({style_class: 'ngoding-tiles'});
         const tile = (emoji, label, fn) => {
-            const b = new St.Button({style_class: 'claude-buddy-tile', can_focus: true,
+            const b = new St.Button({style_class: 'ngoding-tile', can_focus: true,
                 x_expand: true, track_hover: true});
             const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
                 x_align: Clutter.ActorAlign.CENTER, x_expand: true});
-            box.add_child(new St.Label({text: emoji, style_class: 'claude-buddy-tile-emoji',
+            box.add_child(new St.Label({text: emoji, style_class: 'ngoding-tile-emoji',
                 x_align: Clutter.ActorAlign.CENTER}));
-            box.add_child(new St.Label({text: label, style_class: 'claude-buddy-tile-label',
+            box.add_child(new St.Label({text: label, style_class: 'ngoding-tile-label',
                 x_align: Clutter.ActorAlign.CENTER}));
             b.set_child(box);
             b.connect('clicked', () => closeThen(fn));
             tiles.add_child(b);
         };
-        tile('💻', 'Claude Code', () => {
-            this._sayNow('Siap! Buka Claude Code 👑');
+        tile('💻', ch.cli, () => {
+            this._sayNow(`Siap! Buka ${ch.cli} ${ch.logo}`);
             this._launch();
         });
         tile('🌐', 'Browser', () => {
-            this._sayNow('Meluncur ke claude.ai 🌐');
+            this._sayNow(`Meluncur ke ${ch.site} 🌐`);
             this._launchBrowser();
         });
         tile('👤', 'Akun Saya', () => this._openStatus());
         home.add_child(tiles);
 
         // Interaksi: ikon saja, namanya muncul saat disorot
-        home.add_child(new St.Label({text: 'INTERAKSI', style_class: 'claude-buddy-section'}));
-        const row = new St.BoxLayout({style_class: 'claude-buddy-interact-row',
+        home.add_child(new St.Label({text: 'INTERAKSI', style_class: 'ngoding-section'}));
+        const row = new St.BoxLayout({style_class: 'ngoding-interact-row',
             x_align: Clutter.ActorAlign.CENTER});
-        const hint = new St.Label({text: 'Pilih salah satu~', style_class: 'claude-buddy-interact-hint',
+        const hint = new St.Label({text: 'Pilih salah satu~', style_class: 'ngoding-interact-hint',
             x_align: Clutter.ActorAlign.CENTER});
         const ibtn = (emoji, label, fn) => {
-            const b = new St.Button({style_class: 'claude-buddy-ibtn', can_focus: true,
+            const b = new St.Button({style_class: 'ngoding-ibtn', can_focus: true,
                 track_hover: true, label: emoji});
             b.connect('notify::hover', () => {
                 hint.text = b.hover ? (typeof label === 'function' ? label() : label) : 'Pilih salah satu~';
@@ -4013,37 +4281,38 @@ export class Buddy {
         home.add_child(row);
         home.add_child(hint);
 
-        // Ringkasan limit
-        this._homeStats = new St.Label({style_class: 'claude-buddy-home-stats',
+        // Ringkasan limit / akun
+        this._homeStats = new St.Label({style_class: 'ngoding-home-stats',
             x_align: Clutter.ActorAlign.CENTER});
         home.add_child(this._homeStats);
 
         // Matikan
-        const off = new St.Button({style_class: 'claude-buddy-off', label: '⏻  Matikan Claude Buddy',
+        const off = new St.Button({style_class: 'ngoding-off', label: `⏻  Matikan ${APP_NAME}`,
             can_focus: true, x_align: Clutter.ActorAlign.CENTER});
         off.connect('clicked', () => closeThen(() => this._goodbye()));
         home.add_child(off);
 
         this._statusMenu = new PopupMenu.PopupMenu(this._actor, 0.5, St.Side.TOP);
-        this._statusMenu.actor.add_style_class_name('claude-buddy-menu');
+        this._statusMenu.actor.add_style_class_name('ngoding-menu');
+        this._statusMenu.actor.add_style_class_name(theme);
         Main.uiGroup.add_child(this._statusMenu.actor);
         this._statusMenu.actor.hide();
         this._menuManager.addMenu(this._statusMenu);
 
         const card = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false,
-            style_class: 'claude-buddy-status-item'});
+            style_class: 'ngoding-status-item'});
         this._statusBox = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            style_class: 'claude-buddy-status',
+            style_class: 'ngoding-status',
             x_expand: true,
         });
         card.add_child(this._statusBox);
         this._statusMenu.addMenuItem(card);
 
-        const switchItem = new PopupMenu.PopupMenuItem('🔁  Ganti Akun');
-        switchItem.add_style_class_name('claude-buddy-switch-item');
+        const switchItem = new PopupMenu.PopupMenuItem(`🔁  Ganti Akun ${ch.name}`);
+        switchItem.add_style_class_name('ngoding-switch-item');
         switchItem.connect('activate', () => {
-            this._sayNow('Oke! Login akun lain di Chrome ya 🔐');
+            this._sayNow('Oke! Login akun lain ya 🔐');
             this._launchSwitch();
         });
         this._statusMenu.addMenuItem(switchItem);
@@ -4058,26 +4327,53 @@ export class Buddy {
         if (this._moving)
             this._stopRun();
         this._statusMenu.close();
+        this._picker.visible = false;
+        this._swap.checked = false;
         this._updateHome();
         this._menu.open(true);
     }
 
     _updateHome() {
-        this._homeSub.text = pick(['Mau ngapain, bang?', 'Siap melayani! 👑', 'Ada yang bisa dibantu? 😄',
-            'Pilih, pilih~ 👇']);
+        this._homeSub.text = `${APP_NAME} • ${pick(['Mau ngapain, bang?', `Siap melayani! ${this._ch.logo}`,
+            'Ada yang bisa dibantu? 😄', 'Pilih, pilih~ 👇'])}`;
         const st = this._readStatus();
-        const acc = st?.accounts?.root ?? st?.accounts?.yandi;
-        this._homePlan.visible = !!acc?.plan;
-        if (acc?.plan)
-            this._homePlan.text = acc.plan.toUpperCase();
-        const u = st?.usage;
+        const acc = this._account(st);
+        const plan = acc?.plan;
+        this._homePlan.visible = !!plan;
+        if (plan)
+            this._homePlan.text = plan.toUpperCase();
+        const u = this._usage(st);
         const parts = [];
         if (u?.session)
             parts.push(`Sesi ${Math.round(u.session.percent)}%`);
         if (u?.weekly)
             parts.push(`Mingguan ${Math.round(u.weekly.percent)}%`);
-        this._homeStats.text = parts.length ? `⚡ ${parts.join('  •  ')} terpakai` : '';
-        this._homeStats.visible = parts.length > 0;
+        let text = parts.length ? `⚡ ${parts.join('  •  ')} terpakai` : '';
+        if (!text && this._charId !== 'claude' && st) {
+            const agent = st.agents?.[this._charId];
+            if (agent && !agent.installed)
+                text = `⚠️ ${this._ch.cli} belum terpasang`;
+            else if (agent && !acc)
+                text = '🔐 Belum login';
+            else if (acc?.email)
+                text = `👤 ${acc.email}`;
+        }
+        this._homeStats.text = text;
+        this._homeStats.visible = !!text;
+    }
+
+    // Info akun karakter aktif dari status.json (tanpa token)
+    _account(status) {
+        if (!status)
+            return null;
+        if (this._charId === 'claude')
+            return status.accounts?.root ?? status.accounts?.yandi ?? null;
+        return status.agents?.[this._charId]?.account ?? null;
+    }
+
+    // Pemakaian limit hanya tersedia untuk Claude Code
+    _usage(status = this._readStatus()) {
+        return this._charId === 'claude' ? status?.usage ?? null : null;
     }
 
     _openStatus() {
@@ -4117,11 +4413,21 @@ export class Buddy {
             });
         } catch (e) {
             this._statusProc = null;
-            logError(e, 'claude-buddy: refresh status');
+            logError(e, 'teman-ngoding: refresh status');
         }
     }
 
     _reactToStatus(status) {
+        if (this._charId !== 'claude') {
+            const agent = status?.agents?.[this._charId];
+            if (agent && !agent.installed)
+                this._sayNow(`${this._ch.cli} belum terpasang nih 😅`);
+            else if (!agent?.account)
+                this._sayNow('Aku belum login... klik Ganti Akun ya 🔐');
+            else
+                this._sayNow(pick(['Akunnya aman! Gas ngoding 🚀', 'Siap kerja! 💪']));
+            return;
+        }
         const weekly = status?.usage?.weekly?.percent;
         const session = status?.usage?.session?.percent;
         if (weekly === undefined || weekly === null) {
@@ -4139,34 +4445,51 @@ export class Buddy {
     _renderStatus(status, loading) {
         const box = this._statusBox;
         box.destroy_all_children();
-        box.add_child(new St.Label({text: '👤  Akun Saya', style_class: 'claude-buddy-status-title'}));
+        box.add_child(new St.Label({text: `👤  Akun ${this._ch.name}`, style_class: 'ngoding-status-title'}));
 
         if (!status) {
             box.add_child(new St.Label({
                 text: loading ? 'Mengambil data...' : 'Data belum tersedia.',
-                style_class: 'claude-buddy-status-muted',
+                style_class: 'ngoding-status-muted',
             }));
             return;
         }
 
+        if (this._charId === 'claude')
+            this._renderClaudeStatus(box, status);
+        else
+            this._renderAgentStatus(box, status.agents?.[this._charId]);
+
+        const ago = Math.max(0, Math.round(Date.now() / 1000 - status.updated_at));
+        box.add_child(new St.Label({
+            text: `${loading ? '⏳ Memperbarui... • ' : ''}diperbarui ${ago < 60 ? 'barusan' : `${Math.round(ago / 60)} menit lalu`}`,
+            style_class: 'ngoding-status-small',
+        }));
+    }
+
+    _accountRow(box, name, email, plan) {
+        const row = new St.BoxLayout({style_class: 'ngoding-status-account'});
+        const who = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
+        who.add_child(new St.Label({text: name, style_class: 'ngoding-status-name'}));
+        who.add_child(new St.Label({text: email ?? '-', style_class: 'ngoding-status-muted'}));
+        row.add_child(who);
+        if (plan) {
+            row.add_child(new St.Label({
+                text: plan.toUpperCase(),
+                style_class: 'ngoding-status-plan',
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
+        box.add_child(row);
+    }
+
+    _renderClaudeStatus(box, status) {
         const acc = status.accounts?.root ?? status.accounts?.yandi;
         if (acc) {
-            const row = new St.BoxLayout({style_class: 'claude-buddy-status-account'});
-            const who = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
-            who.add_child(new St.Label({text: acc.name ?? 'Akun Claude', style_class: 'claude-buddy-status-name'}));
-            who.add_child(new St.Label({text: acc.email ?? '-', style_class: 'claude-buddy-status-muted'}));
-            row.add_child(who);
-            if (acc.plan) {
-                row.add_child(new St.Label({
-                    text: acc.plan.toUpperCase(),
-                    style_class: 'claude-buddy-status-plan',
-                    y_align: Clutter.ActorAlign.CENTER,
-                }));
-            }
-            box.add_child(row);
+            this._accountRow(box, acc.name ?? 'Akun Claude', acc.email, acc.plan);
             const users = Object.entries(status.accounts)
-                .map(([user, a]) => `${user === 'root' ? 'Claude Buddy (root)' : `user ${user}`}: ${a.email ?? '-'}`);
-            box.add_child(new St.Label({text: users.join('\n'), style_class: 'claude-buddy-status-small'}));
+                .map(([user, a]) => `${user === 'root' ? `${APP_NAME} (root)` : `user ${user}`}: ${a.email ?? '-'}`);
+            box.add_child(new St.Label({text: users.join('\n'), style_class: 'ngoding-status-small'}));
         }
 
         const u = status.usage;
@@ -4176,22 +4499,22 @@ export class Buddy {
                     return;
                 const pct = clamp(part.percent, 0, 100);
                 const row = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
-                    style_class: 'claude-buddy-status-limit'});
+                    style_class: 'ngoding-status-limit'});
                 const top = new St.BoxLayout();
-                top.add_child(new St.Label({text: title, style_class: 'claude-buddy-status-label', x_expand: true}));
+                top.add_child(new St.Label({text: title, style_class: 'ngoding-status-label', x_expand: true}));
                 top.add_child(new St.Label({text: `${Math.round(pct)}% terpakai`,
-                    style_class: 'claude-buddy-status-pct'}));
+                    style_class: 'ngoding-status-pct'}));
                 row.add_child(top);
                 const trackW = 260;
-                const track = new St.Widget({style_class: 'claude-buddy-bar-track', width: trackW, height: 10});
+                const track = new St.Widget({style_class: 'ngoding-bar-track', width: trackW, height: 10});
                 const level = pct >= 85 ? 'high' : pct >= 60 ? 'mid' : 'low';
-                const fill = new St.Widget({style_class: `claude-buddy-bar-fill claude-buddy-bar-${level}`,
+                const fill = new St.Widget({style_class: `ngoding-bar-fill ngoding-bar-${level}`,
                     width: Math.max(4, Math.round(trackW * pct / 100)), height: 10});
                 track.add_child(fill);
                 row.add_child(track);
                 row.add_child(new St.Label({
                     text: `Sisa ${Math.round(100 - pct)}% • reset ${relativeTime(part.resets_at)}`,
-                    style_class: 'claude-buddy-status-small',
+                    style_class: 'ngoding-status-small',
                 }));
                 box.add_child(row);
             };
@@ -4201,37 +4524,61 @@ export class Buddy {
             bar('Mingguan – Sonnet', u.weekly_sonnet);
         } else if (status.error) {
             box.add_child(new St.Label({text: `Gagal ambil limit: ${status.error}`,
-                style_class: 'claude-buddy-status-muted'}));
+                style_class: 'ngoding-status-muted'}));
         }
+    }
 
-        const ago = Math.max(0, Math.round(Date.now() / 1000 - status.updated_at));
-        box.add_child(new St.Label({
-            text: `${loading ? '⏳ Memperbarui... • ' : ''}diperbarui ${ago < 60 ? 'barusan' : `${Math.round(ago / 60)} menit lalu`}`,
-            style_class: 'claude-buddy-status-small',
-        }));
+    _renderAgentStatus(box, agent) {
+        const ch = this._ch;
+        const muted = text => box.add_child(new St.Label({text, style_class: 'ngoding-status-muted'}));
+        const small = text => box.add_child(new St.Label({text, style_class: 'ngoding-status-small'}));
+        if (!agent) {
+            muted('Data belum tersedia.');
+            return;
+        }
+        if (!agent.installed) {
+            muted(`${ch.cli} belum terpasang.`);
+            return;
+        }
+        const acc = agent.account;
+        if (acc) {
+            this._accountRow(box, acc.name ?? `Akun ${ch.name}`, acc.email ?? acc.auth, acc.plan);
+            if (acc.providers?.length)
+                small(`Provider: ${acc.providers.join(', ')}`);
+            if (acc.email && acc.auth)
+                small(`Login: ${acc.auth}`);
+        } else {
+            muted('Belum login. Tekan "Ganti Akun" untuk login.');
+        }
+        if (agent.version)
+            small(`${ch.cli} ${agent.version}`);
+        if (agent.note)
+            small(agent.note);
+        small('Info sisa limit hanya tersedia untuk Claude Code.');
     }
 
     _launchBrowser() {
+        const url = this._ch.url;
         try {
             const chrome = GioUnix.DesktopAppInfo.new('google-chrome.desktop');
             if (chrome) {
-                chrome.launch_uris([BROWSER_URL], global.create_app_launch_context(0, -1));
+                chrome.launch_uris([url], global.create_app_launch_context(0, -1));
                 return;
             }
-            Gio.AppInfo.launch_default_for_uri(BROWSER_URL, global.create_app_launch_context(0, -1));
+            Gio.AppInfo.launch_default_for_uri(url, global.create_app_launch_context(0, -1));
         } catch (e) {
-            logError(e, 'claude-buddy: browser');
-            Main.notify('Claude Buddy', 'Tidak bisa membuka Chrome');
+            logError(e, 'teman-ngoding: browser');
+            Main.notify(APP_NAME, 'Tidak bisa membuka Chrome');
         }
     }
 
     _launch() {
         try {
-            const app = GioUnix.DesktopAppInfo.new_from_filename(LAUNCHER);
-            app.launch([], global.create_app_launch_context(0, -1));
+            const proc = Gio.Subprocess.new([LAUNCH_SCRIPT, this._charId], Gio.SubprocessFlags.NONE);
+            proc.wait_async(null, null);
         } catch (e) {
-            logError(e, 'claude-buddy: launch');
-            Main.notify('Claude Buddy', `Tidak bisa membuka ${LAUNCHER}`);
+            logError(e, 'teman-ngoding: launch');
+            Main.notify(APP_NAME, `Tidak bisa membuka ${this._ch.cli}`);
         }
     }
 }

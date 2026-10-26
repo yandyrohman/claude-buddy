@@ -1,8 +1,8 @@
 #!/bin/bash
-# Dipanggil (sebagai root) oleh `claude auth login` untuk membuka URL login.
+# Dipanggil (sebagai root) oleh CLI (claude, gemini, codex, opencode) untuk membuka URL login.
 # Membuka URL di Chrome milik user desktop, bukan sebagai root.
 url="$1"
-user="${CLAUDE_BUDDY_USER:-yandi}"
+user="${TEMAN_NGODING_USER:-yandi}"
 uid="$(id -u "$user")"
 exec runuser -u "$user" -- env \
     XDG_RUNTIME_DIR="/run/user/$uid" \

@@ -1,0 +1,8 @@
+[Unit]
+Description=Teman Ngoding: ambil status akun & limit CLI AI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/teman-ngoding-status

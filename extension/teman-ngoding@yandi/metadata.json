@@ -1,0 +1,6 @@
+{
+  "uuid": "teman-ngoding@yandi",
+  "name": "Teman Ngoding",
+  "description": "Teman ngoding di desktop: Claude, Gemini, Codex, atau OpenCode yang mengambang dan berkedip; klik untuk membuka CLI-nya.",
+  "shell-version": ["50"]
+}

@@ -1,0 +1,502 @@
+/* Bayangan tanah (di-blur lewat kode) */
+.ngoding-ground {
+  background-color: rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+}
+
+/* Gelembung kata-kata: gaya komik-piksel, cocok dengan maskot */
+.ngoding-bubble {
+  background-color: #fff8ee;
+  border: 2px solid #2b2230;
+  border-radius: 14px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 0 0 rgba(43, 34, 48, 0.35);
+}
+
+.ngoding-bubble-text {
+  color: #2b2230;
+  font-family: monospace;
+  font-size: 11.5pt;
+  font-weight: 700;
+}
+
+/* Properti adegan */
+.ngoding-string {
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.ngoding-code-line {
+  background-color: #7ce38b;
+}
+
+.ngoding-glyph {
+  color: #7ce38b;
+  font-family: monospace;
+  font-size: 13pt;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.ngoding-z {
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 16pt;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Mainan baru */
+.ngoding-note {
+  font-size: 18pt;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.ngoding-steam {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15pt;
+  font-weight: 700;
+}
+
+.ngoding-plane {
+  font-size: 26pt;
+}
+
+.ngoding-count {
+  color: #ffe27a;
+  font-family: monospace;
+  font-size: 15pt;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.ngoding-pop {
+  font-size: 30pt;
+}
+
+/* Menu klik */
+.ngoding-menu .popup-menu-content {
+  background-color: #fff8ee;
+  border: 2px solid #2b2230;
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 4px 0 0 rgba(43, 34, 48, 0.35);
+}
+
+.ngoding-menu .popup-menu-item {
+  color: #2b2230;
+  border-radius: 10px;
+}
+
+.ngoding-menu .popup-menu-item:hover,
+.ngoding-menu .popup-menu-item:focus {
+  background-color: rgba(217, 119, 87, 0.18);
+  color: #2b2230;
+}
+
+.ngoding-menu-title {
+  font-family: monospace;
+  font-weight: 700;
+  color: #d97757;
+}
+
+.ngoding-menu-item {
+  spacing: 12px;
+  padding: 8px 12px;
+}
+
+.ngoding-menu-emoji {
+  font-size: 18pt;
+}
+
+.ngoding-menu-label {
+  font-weight: 700;
+  font-size: 11pt;
+  color: #2b2230;
+}
+
+.ngoding-menu-hint {
+  font-size: 9pt;
+  color: rgba(43, 34, 48, 0.65);
+}
+
+/* Kartu status */
+.ngoding-status-item:hover {
+  background-color: transparent;
+}
+
+.ngoding-status {
+  spacing: 10px;
+  padding: 4px 6px;
+  min-width: 280px;
+}
+
+.ngoding-status-title {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 11.5pt;
+  color: #d97757;
+}
+
+.ngoding-status-account {
+  spacing: 10px;
+  padding: 8px 10px;
+  background-color: rgba(217, 119, 87, 0.12);
+  border-radius: 10px;
+}
+
+.ngoding-status-name {
+  font-weight: 700;
+  color: #2b2230;
+}
+
+.ngoding-status-plan {
+  font-size: 8.5pt;
+  font-weight: 800;
+  color: #ffffff;
+  background-color: #d97757;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.ngoding-status-limit {
+  spacing: 4px;
+}
+
+.ngoding-status-label {
+  font-weight: 700;
+  color: #2b2230;
+}
+
+.ngoding-status-pct {
+  font-family: monospace;
+  font-weight: 700;
+  color: #2b2230;
+}
+
+.ngoding-bar-track {
+  background-color: rgba(43, 34, 48, 0.12);
+  border-radius: 999px;
+}
+
+.ngoding-bar-fill {
+  border-radius: 999px;
+}
+
+.ngoding-bar-low { background-color: #3fb950; }
+.ngoding-bar-mid { background-color: #e3b341; }
+.ngoding-bar-high { background-color: #f85149; }
+
+.ngoding-status-muted {
+  color: rgba(43, 34, 48, 0.65);
+}
+
+.ngoding-status-small {
+  font-size: 9pt;
+  color: rgba(43, 34, 48, 0.6);
+}
+
+/* Emosi */
+.ngoding-emote {
+  font-size: 20pt;
+}
+
+.ngoding-dust {
+  font-size: 14pt;
+}
+
+/* Mainan tambahan */
+.ngoding-star,
+.ngoding-sparkle {
+  font-size: 15pt;
+}
+
+.ngoding-prize {
+  font-size: 26pt;
+}
+
+/* Interaksi */
+.ngoding-hand {
+  font-size: 30pt;
+}
+
+.ngoding-crumb {
+  color: #c9783e;
+  font-size: 22pt;
+  font-weight: 800;
+}
+
+.ngoding-ctar {
+  color: #ffe27a;
+  font-family: monospace;
+  font-size: 20pt;
+  font-weight: 900;
+  text-shadow: 0 2px 0 #2b2230, 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+.ngoding-switch-item {
+  font-weight: 700;
+  color: #d97757;
+}
+
+/* Panel utama (menu klik) */
+.ngoding-home-item,
+.ngoding-home-item:hover {
+  background-color: transparent;
+  padding: 0;
+}
+
+.ngoding-home {
+  spacing: 12px;
+  padding: 6px 4px 4px 4px;
+  min-width: 330px;
+}
+
+.ngoding-home-header {
+  spacing: 10px;
+  padding: 2px 4px;
+}
+
+.ngoding-home-logo {
+  font-size: 22pt;
+}
+
+.ngoding-home-title {
+  font-family: monospace;
+  font-weight: 800;
+  font-size: 13pt;
+  color: #2b2230;
+}
+
+.ngoding-home-sub {
+  font-size: 9.5pt;
+  color: rgba(43, 34, 48, 0.65);
+}
+
+.ngoding-tiles {
+  spacing: 8px;
+}
+
+.ngoding-tile {
+  background-color: #ffffff;
+  border: 2px solid #2b2230;
+  border-radius: 14px;
+  padding: 10px 6px 8px 6px;
+  box-shadow: 0 3px 0 0 rgba(43, 34, 48, 0.85);
+  color: #2b2230;
+}
+
+.ngoding-tile:hover,
+.ngoding-tile:focus {
+  background-color: #ffe9dc;
+  border-color: #d97757;
+  box-shadow: 0 3px 0 0 #d97757;
+}
+
+.ngoding-tile:active {
+  box-shadow: none;
+  background-color: #ffd9c4;
+}
+
+.ngoding-tile-emoji {
+  font-size: 22pt;
+}
+
+.ngoding-tile-label {
+  font-weight: 700;
+  font-size: 9.5pt;
+  color: #2b2230;
+  padding-top: 4px;
+}
+
+.ngoding-section {
+  font-family: monospace;
+  font-size: 8.5pt;
+  font-weight: 800;
+  color: #d97757;
+  padding: 2px 4px 0 4px;
+}
+
+.ngoding-interact-row {
+  spacing: 10px;
+}
+
+.ngoding-ibtn {
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  background-color: #ffffff;
+  border: 2px solid #2b2230;
+  box-shadow: 0 3px 0 0 rgba(43, 34, 48, 0.85);
+  font-size: 19pt;
+}
+
+.ngoding-ibtn:hover,
+.ngoding-ibtn:focus {
+  background-color: #ffe9dc;
+  border-color: #d97757;
+  box-shadow: 0 3px 0 0 #d97757;
+}
+
+.ngoding-ibtn:active {
+  box-shadow: none;
+  background-color: #ffd9c4;
+}
+
+.ngoding-interact-hint {
+  font-size: 9.5pt;
+  font-weight: 700;
+  color: rgba(43, 34, 48, 0.7);
+}
+
+.ngoding-home-stats {
+  font-family: monospace;
+  font-size: 8.5pt;
+  color: rgba(43, 34, 48, 0.75);
+  background-color: rgba(217, 119, 87, 0.12);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+/* Tombol matikan & sesenggukan */
+.ngoding-off {
+  font-size: 9pt;
+  font-weight: 700;
+  color: rgba(43, 34, 48, 0.6);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.ngoding-off:hover,
+.ngoding-off:focus {
+  color: #c0392b;
+  background-color: rgba(192, 57, 43, 0.1);
+}
+
+.ngoding-sob {
+  color: #7fc8ff;
+  font-family: monospace;
+  font-size: 13pt;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Tombol ganti karakter (⇄) & pilihan karakter */
+.ngoding-swap {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background-color: #ffffff;
+  border: 2px solid #2b2230;
+  box-shadow: 0 2px 0 0 rgba(43, 34, 48, 0.85);
+  color: #2b2230;
+  font-size: 13pt;
+  font-weight: 800;
+}
+
+.ngoding-swap:hover,
+.ngoding-swap:focus,
+.ngoding-swap:checked {
+  background-color: #ffe9dc;
+  border-color: #d97757;
+  box-shadow: 0 2px 0 0 #d97757;
+}
+
+.ngoding-picker {
+  spacing: 6px;
+}
+
+.ngoding-chips {
+  spacing: 6px;
+}
+
+.ngoding-chip {
+  background-color: #ffffff;
+  border: 2px solid #2b2230;
+  border-radius: 12px;
+  padding: 6px 4px 5px 4px;
+  box-shadow: 0 2px 0 0 rgba(43, 34, 48, 0.85);
+  color: #2b2230;
+}
+
+.ngoding-chip:hover,
+.ngoding-chip:focus {
+  background-color: #f3efe9;
+}
+
+.ngoding-chip-active {
+  box-shadow: none;
+  border-width: 3px;
+}
+
+.ngoding-chip-emoji {
+  font-size: 16pt;
+}
+
+.ngoding-chip-label {
+  font-size: 8.5pt;
+  font-weight: 800;
+  color: #2b2230;
+  padding-top: 2px;
+}
+
+/* Warna khas tiap karakter pada chip */
+.ngoding-chip-claude.ngoding-chip-active { border-color: #d97757; background-color: #ffe9dc; }
+.ngoding-chip-gemini.ngoding-chip-active { border-color: #7b7fe0; background-color: #e8eafc; }
+.ngoding-chip-codex.ngoding-chip-active { border-color: #111111; background-color: #ececea; }
+.ngoding-chip-opencode.ngoding-chip-active { border-color: #16a37b; background-color: #dcf5ec; }
+
+/* Aksen menu: gemini */
+.ngoding-theme-gemini .popup-menu-item:hover,
+.ngoding-theme-gemini .popup-menu-item:focus { background-color: rgba(123, 127, 224, 0.16); }
+.ngoding-theme-gemini .ngoding-status-title,
+.ngoding-theme-gemini .ngoding-switch-item,
+.ngoding-theme-gemini .ngoding-section { color: #7b7fe0; }
+.ngoding-theme-gemini .ngoding-status-account,
+.ngoding-theme-gemini .ngoding-home-stats { background-color: rgba(123, 127, 224, 0.12); }
+.ngoding-theme-gemini .ngoding-status-plan { background-color: #7b7fe0; }
+.ngoding-theme-gemini .ngoding-tile:hover, .ngoding-theme-gemini .ngoding-tile:focus,
+.ngoding-theme-gemini .ngoding-ibtn:hover, .ngoding-theme-gemini .ngoding-ibtn:focus,
+.ngoding-theme-gemini .ngoding-swap:hover, .ngoding-theme-gemini .ngoding-swap:focus, .ngoding-theme-gemini .ngoding-swap:checked {
+  background-color: #e8eafc;
+  border-color: #7b7fe0;
+  box-shadow: 0 3px 0 0 #7b7fe0;
+}
+.ngoding-theme-gemini .ngoding-tile:active, .ngoding-theme-gemini .ngoding-ibtn:active { background-color: #d6d9fa; box-shadow: none; }
+
+/* Aksen menu: codex */
+.ngoding-theme-codex .popup-menu-item:hover,
+.ngoding-theme-codex .popup-menu-item:focus { background-color: rgba(17, 17, 17, 0.16); }
+.ngoding-theme-codex .ngoding-status-title,
+.ngoding-theme-codex .ngoding-switch-item,
+.ngoding-theme-codex .ngoding-section { color: #111111; }
+.ngoding-theme-codex .ngoding-status-account,
+.ngoding-theme-codex .ngoding-home-stats { background-color: rgba(17, 17, 17, 0.12); }
+.ngoding-theme-codex .ngoding-status-plan { background-color: #111111; }
+.ngoding-theme-codex .ngoding-tile:hover, .ngoding-theme-codex .ngoding-tile:focus,
+.ngoding-theme-codex .ngoding-ibtn:hover, .ngoding-theme-codex .ngoding-ibtn:focus,
+.ngoding-theme-codex .ngoding-swap:hover, .ngoding-theme-codex .ngoding-swap:focus, .ngoding-theme-codex .ngoding-swap:checked {
+  background-color: #ececea;
+  border-color: #111111;
+  box-shadow: 0 3px 0 0 #111111;
+}
+.ngoding-theme-codex .ngoding-tile:active, .ngoding-theme-codex .ngoding-ibtn:active { background-color: #dcdcd8; box-shadow: none; }
+
+/* Aksen menu: opencode */
+.ngoding-theme-opencode .popup-menu-item:hover,
+.ngoding-theme-opencode .popup-menu-item:focus { background-color: rgba(22, 163, 123, 0.16); }
+.ngoding-theme-opencode .ngoding-status-title,
+.ngoding-theme-opencode .ngoding-switch-item,
+.ngoding-theme-opencode .ngoding-section { color: #16a37b; }
+.ngoding-theme-opencode .ngoding-status-account,
+.ngoding-theme-opencode .ngoding-home-stats { background-color: rgba(22, 163, 123, 0.12); }
+.ngoding-theme-opencode .ngoding-status-plan { background-color: #16a37b; }
+.ngoding-theme-opencode .ngoding-tile:hover, .ngoding-theme-opencode .ngoding-tile:focus,
+.ngoding-theme-opencode .ngoding-ibtn:hover, .ngoding-theme-opencode .ngoding-ibtn:focus,
+.ngoding-theme-opencode .ngoding-swap:hover, .ngoding-theme-opencode .ngoding-swap:focus, .ngoding-theme-opencode .ngoding-swap:checked {
+  background-color: #dcf5ec;
+  border-color: #16a37b;
+  box-shadow: 0 3px 0 0 #16a37b;
+}
+.ngoding-theme-opencode .ngoding-tile:active, .ngoding-theme-opencode .ngoding-ibtn:active { background-color: #c4eedf; box-shadow: none; }
+

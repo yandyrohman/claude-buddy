@@ -1,8 +1,8 @@
-// Izinkan user yandi menjalankan (start) layanan status Claude Buddy tanpa password.
+// Izinkan user yandi menjalankan (start) layanan status Teman Ngoding tanpa password.
 // Hanya unit ini dan hanya verb "start".
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
-        action.lookup("unit") == "claude-buddy-status.service" &&
+        action.lookup("unit") == "teman-ngoding-status.service" &&
         action.lookup("verb") == "start" &&
         subject.user == "yandi") {
         return polkit.Result.YES;

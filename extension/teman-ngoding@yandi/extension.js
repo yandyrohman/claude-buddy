@@ -1,4 +1,4 @@
-// Pemuat Claude Buddy.
+// Pemuat Teman Ngoding.
 //
 // Kode maskot ada di buddy.js. Saat enable, file itu disalin ke nama unik di
 // $XDG_RUNTIME_DIR lalu di-import, sehingga perubahan buddy.js bisa dimuat
@@ -9,14 +9,14 @@ import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-export default class ClaudeBuddyExtension extends Extension {
+export default class TemanNgodingExtension extends Extension {
     enable() {
         const token = {};
         this._token = token;
 
         const src = this.dir.get_child('buddy.js');
         const runDir = Gio.File.new_for_path(
-            GLib.build_filenamev([GLib.get_user_runtime_dir(), 'claude-buddy']));
+            GLib.build_filenamev([GLib.get_user_runtime_dir(), 'teman-ngoding']));
         try {
             runDir.make_directory_with_parents(null);
         } catch {
@@ -39,7 +39,7 @@ export default class ClaudeBuddyExtension extends Extension {
                 return;
             this._buddy = new module.Buddy(this.path);
             this._buddy.enable();
-        }).catch(e => logError(e, 'claude-buddy: load'));
+        }).catch(e => logError(e, 'teman-ngoding: load'));
     }
 
     disable() {

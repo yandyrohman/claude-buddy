@@ -1,0 +1,31 @@
+#!/bin/bash
+# Dipanggil oleh aplikasi "Teman Ngoding" (dijalankan sebagai user desktop).
+#   teman-ngoding-launch [claude|gemini|codex|opencode]
+# - Kalau maskot sedang mati / sedang pamit: nyalakan lagi.
+# - Kalau sedang hidup: buka CLI karakter tersebut (root) di terminal. Tanpa
+#   argumen, dipakai karakter yang sedang aktif di maskot (default: claude).
+UUID="teman-ngoding@yandi"
+FLAG="${XDG_CACHE_HOME:-$HOME/.cache}/teman-ngoding-was-off"
+STATE="${XDG_CONFIG_HOME:-$HOME/.config}/teman-ngoding.json"
+
+agent="$1"
+if [ -z "$agent" ]; then
+    state="$(gnome-extensions info "$UUID" 2>/dev/null | sed -n 's/^ *State: //p')"
+    if [ -e "$FLAG" ] || [ "$state" != "ACTIVE" ]; then
+        # kalau masih dalam animasi pamit, matikan dulu lalu nyalakan lagi
+        [ "$state" = "ACTIVE" ] && gnome-extensions disable "$UUID"
+        gnome-extensions enable "$UUID"
+        exit 0
+    fi
+    agent="$(sed -n 's/.*"character" *: *"\([a-z]*\)".*/\1/p' "$STATE" 2>/dev/null)"
+fi
+
+case "$agent" in
+    claude) title="Claude Code" ;;
+    gemini) title="Gemini CLI" ;;
+    codex) title="Codex CLI" ;;
+    opencode) title="OpenCode" ;;
+    *) agent=claude; title="Claude Code" ;;
+esac
+
+exec ptyxis --new-window --title="Teman Ngoding – $title" -x "/usr/local/bin/teman-ngoding-run $agent"
