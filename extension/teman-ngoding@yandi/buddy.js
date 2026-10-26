@@ -99,7 +99,7 @@ const CHARACTERS = {
     },
     gemini: {
         name: 'Gemini',
-        cli: 'Gemini CLI',
+        cli: 'Antigravity CLI',
         logo: '✨',
         url: 'https://gemini.google.com/app',
         site: 'gemini.google.com',

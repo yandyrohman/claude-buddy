@@ -1,5 +1,6 @@
 #!/bin/bash
 # Jalankan CLI AI sebagai root: teman-ngoding-run [claude|gemini|codex|opencode] [argumen...]
+# Karakter Gemini memakai Antigravity CLI (agy); Gemini CLI tidak lagi menerima login akun Google pribadi.
 # Dipakai oleh "Teman Ngoding" (lewat teman-ngoding-launch). Halaman login yang
 # dibuka CLI diarahkan ke Chrome milik user (bukan root) lewat open-in-user-chrome.
 
@@ -8,13 +9,17 @@ shift
 
 case "$agent" in
     claude) bin=/root/.local/bin/claude; name="Claude Code" ;;
-    gemini) bin=gemini; name="Gemini CLI" ;;
+    gemini) bin=/root/.local/bin/agy; name="Antigravity CLI" ;;
     codex) bin=codex; name="Codex CLI" ;;
     opencode) bin=opencode; name="OpenCode" ;;
     *) echo "Karakter tidak dikenal: $agent" >&2; exit 2 ;;
 esac
 
 cd "$HOME" 2>/dev/null || cd /
+
+# API key Gemini (kalau dipilih lewat "Ganti Akun") disimpan di /root/.gemini/.env
+with_env=()
+[ "$agent" = gemini ] && with_env=(bash -c 'set -a; [ -r /root/.gemini/.env ] && . /root/.gemini/.env; set +a; exec "$0" "$@"')
 
 sudo env \
     IS_SANDBOX=1 \
@@ -25,7 +30,7 @@ sudo env \
     WAYLAND_DISPLAY="$WAYLAND_DISPLAY" DISPLAY="$DISPLAY" \
     COLORTERM="${COLORTERM:-truecolor}" \
     TERM="${TERM:-xterm-256color}" \
-    "$bin" "$@"
+    "${with_env[@]}" "$bin" "$@"
 status=$?
 
 if [ "$status" -ne 0 ]; then

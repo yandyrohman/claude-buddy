@@ -15,16 +15,21 @@ as_root() {
         "$@"
 }
 
-gemini_auth() {
-    # Set metode login Gemini CLI (security.auth.selectedType di settings.json)
+gemini_provider() {
+    # Set metode login Antigravity CLI: "gemini" = API key, kosong = akun Google
+    # (modelProvider di /root/.gemini/antigravity-cli/settings.json)
     as_root python3 -c '
-import json, sys
-path = "/root/.gemini/settings.json"
+import json, os, sys
+path = "/root/.gemini/antigravity-cli/settings.json"
 try:
     data = json.load(open(path))
 except (OSError, ValueError):
     data = {}
-data.setdefault("security", {}).setdefault("auth", {})["selectedType"] = sys.argv[1]
+if sys.argv[1]:
+    data["modelProvider"] = sys.argv[1]
+else:
+    data.pop("modelProvider", None)
+os.makedirs(os.path.dirname(path), exist_ok=True)
 json.dump(data, open(path, "w"), indent=2)
 ' "$1"
 }
@@ -46,27 +51,27 @@ case "$agent" in
         status=$?
         ;;
     gemini)
-        echo "🔁 Ganti akun Gemini CLI (Teman Ngoding)"
+        echo "🔁 Ganti akun Gemini / Antigravity CLI (Teman Ngoding)"
         echo
-        echo "  1) Login dengan akun Google (butuh langganan Gemini Code Assist / Google AI)"
+        echo "  1) Login dengan akun Google (Antigravity)"
         echo "  2) Pakai API key dari https://aistudio.google.com/apikey"
         read -rp "Pilih [1/2]: " choice
         if [ "$choice" = "2" ]; then
             if ask_key; then
                 printf 'GEMINI_API_KEY=%s\n' "$key" | as_root bash -c 'umask 077; mkdir -p /root/.gemini; cat > /root/.gemini/.env'
-                gemini_auth gemini-api-key
+                gemini_provider gemini
                 echo "✅ API key disimpan di /root/.gemini/.env"
                 status=0
             else
                 status=1
             fi
         else
-            gemini_auth oauth-personal
-            # Lupakan login lama supaya Gemini CLI meminta login lagi
-            as_root bash -c 'cd /root/.gemini 2>/dev/null && for f in oauth_creds.json google_accounts.json; do [ -e "$f" ] && mv -f "$f" "$f.bak"; done; true'
-            echo "Gemini CLI akan terbuka dan meminta login. Setelah berhasil, ketik /quit."
+            gemini_provider ""
+            echo "Antigravity CLI akan terbuka dan meminta login di Chrome."
+            echo "Kalau masih masuk dengan akun lama, ketik /logout lalu buka lagi lewat maskot."
+            echo "Setelah berhasil login, ketik /quit."
             echo
-            as_root bash -c 'cd /root && gemini'
+            as_root bash -c 'cd /root && /root/.local/bin/agy'
             status=$?
         fi
         ;;

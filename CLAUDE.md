@@ -15,10 +15,12 @@ semua file disalin apa adanya ke lokasi sistem.
    gnome-shell --version          # harus cocok dengan "shell-version" di extension/teman-ngoding@yandi/metadata.json
    which ptyxis google-chrome python3 sudo gnome-extensions
    sudo test -x /root/.local/bin/claude && echo ok   # Claude Code untuk root
-   which gemini codex opencode                       # CLI lain (opsional, npm global)
+   sudo test -x /root/.local/bin/agy && echo ok      # Antigravity CLI untuk karakter Gemini (opsional)
+   which codex opencode                              # CLI lain (opsional, npm global)
    ```
    - Versi GNOME beda → tambahkan versinya ke `shell-version` di `metadata.json` (tanya user dulu).
    - Claude Code root belum ada → pasang dengan `sudo bash -c 'curl -fsSL https://claude.ai/install.sh | bash'`, lalu login lewat `bin/teman-ngoding-switch claude`.
+   - Antigravity CLI root belum ada → `sudo bash -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'`.
    - `ptyxis` tidak ada → tanyakan terminal apa yang dipakai, lalu ganti baris `exec ptyxis ...` di `bin/teman-ngoding-launch`.
 
 2. **Jalankan installer**:

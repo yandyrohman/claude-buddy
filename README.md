@@ -7,7 +7,7 @@ diganti lewat tombol kecil **⇄** di kartu menu:
 | Karakter | Tampilan | Membuka |
 |---|---|---|
 | **Claude** (default) | Clawd oranye bermahkota 👑 | Claude Code |
-| **Gemini** | Gradasi biru-ungu dengan bintang ✦ | Gemini CLI |
+| **Gemini** | Gradasi biru-ungu dengan bintang ✦ | Antigravity CLI (`agy`) |
 | **Codex** | Putih dengan layar terminal `>_` di kepala | Codex CLI |
 | **OpenCode** | Abu gelap dengan kurung kurawal `{ }` | OpenCode |
 
@@ -21,7 +21,7 @@ Kartu "Akun Saya" menampilkan akun CLI karakter aktif; sisa limit hanya tersedia
 |---|---|---|
 | `extension/teman-ngoding@yandi/` | Ekstensi GNOME Shell (`buddy.js` = maskot & karakter, `extension.js` = pemuat) | `~/.local/share/gnome-shell/extensions/` |
 | `bin/teman-ngoding-launch` | Dipanggil ikon aplikasi: nyalakan maskot / buka CLI karakter aktif | `/usr/local/bin/` |
-| `bin/teman-ngoding-run` | Jalankan `claude` / `gemini` / `codex` / `opencode` sebagai root | `/usr/local/bin/` |
+| `bin/teman-ngoding-run` | Jalankan `claude` / `agy` / `codex` / `opencode` sebagai root | `/usr/local/bin/` |
 | `bin/teman-ngoding-switch` | Ganti akun CLI (login via Chrome user, atau API key) | `/usr/local/bin/` |
 | `bin/teman-ngoding-status` | Ambil info akun + limit → `/run/teman-ngoding/status.json` | `/usr/local/bin/` |
 | `lib/open-in-user-chrome` | Buka URL login di Chrome milik user (bukan root) | `/usr/local/lib/teman-ngoding/` |
@@ -35,7 +35,8 @@ Kartu "Akun Saya" menampilkan akun CLI karakter aktif; sisa limit hanya tersedia
 - `ptyxis` (terminal), `google-chrome`, `python3`, `sudo`
 - CLI yang mau dipakai, terpasang untuk root:
   - [Claude Code](https://claude.com/claude-code) di `/root/.local/bin/claude`
-  - Gemini CLI: `sudo npm install -g @google/gemini-cli`
+  - Antigravity CLI (karakter Gemini) di `/root/.local/bin/agy`:
+    `sudo bash -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'`
   - Codex CLI: `sudo npm install -g @openai/codex`
   - OpenCode: `sudo npm install -g opencode-ai`
 
@@ -56,9 +57,10 @@ biasanya perlu **logout/login sekali** sebelum maskot muncul.
 Buka kartu **Akun Saya → Ganti Akun** pada karakter yang aktif:
 
 - **Claude**: `claude auth login`
-- **Gemini**: login akun Google, atau API key dari [AI Studio](https://aistudio.google.com/apikey)
-  (disimpan di `/root/.gemini/.env`). Login Google gratis sudah tidak didukung Google
-  (`IneligibleTierError`); pakai API key kalau muncul error itu.
+- **Gemini**: memakai Antigravity CLI (`agy`). Login akun Google, atau API key dari
+  [AI Studio](https://aistudio.google.com/apikey) (disimpan di `/root/.gemini/.env`, plus
+  `"modelProvider": "gemini"` di `/root/.gemini/antigravity-cli/settings.json`).
+  Gemini CLI lama sudah ditolak Google untuk akun pribadi ("This client is no longer supported…").
 - **Codex**: akun ChatGPT (`codex login`) atau OpenAI API key
 - **OpenCode**: `opencode auth login` (pilih provider)
 

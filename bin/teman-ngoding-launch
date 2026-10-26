@@ -34,7 +34,7 @@ fi
 
 case "$agent" in
     claude) title="Claude Code" ;;
-    gemini) title="Gemini CLI" ;;
+    gemini) title="Antigravity CLI" ;;
     codex) title="Codex CLI" ;;
     opencode) title="OpenCode" ;;
     *) agent=claude; title="Claude Code" ;;

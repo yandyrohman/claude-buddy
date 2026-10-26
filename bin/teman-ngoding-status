@@ -2,7 +2,7 @@
 """Kumpulkan status akun CLI AI untuk Teman Ngoding.
 
 - Claude Code: info akun + sisa limit (accounts, usage)
-- Gemini CLI, Codex CLI, OpenCode: terpasang/tidak, versi, info akun (agents)
+- Antigravity CLI (Gemini), Codex CLI, OpenCode: terpasang/tidak, versi, info akun (agents)
 
 Berjalan sebagai root lewat teman-ngoding-status.service. Token & API key hanya
 dibaca di sini dan TIDAK ditulis ke file output; output hanya berisi info akun
@@ -13,6 +13,7 @@ import base64
 import json
 import os
 import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -82,6 +83,16 @@ def package_version(binary):
     return None
 
 
+def binary_version(binary):
+    """Versi CLI biner (bukan paket npm) lewat `<binary> --version`."""
+    try:
+        out = subprocess.run([binary, '--version'], capture_output=True, text=True, timeout=15,
+                             env={'HOME': '/root', 'PATH': ROOT_PATH}).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.splitlines()[0] if out else None
+
+
 def jwt_claims(token):
     try:
         payload = token.split('.')[1]
@@ -91,21 +102,32 @@ def jwt_claims(token):
 
 
 def gemini_account():
-    home = '/root/.gemini'
-    settings = load_json(os.path.join(home, 'settings.json')) or {}
-    auth = ((settings.get('security') or {}).get('auth') or {}).get('selectedType')
-    if auth == 'gemini-api-key':
+    """Akun Antigravity CLI (agy): API key atau login Google."""
+    settings = load_json('/root/.gemini/antigravity-cli/settings.json') or {}
+    if settings.get('modelProvider') == 'gemini':
         try:
-            with open(os.path.join(home, '.env')) as f:
+            with open('/root/.gemini/.env') as f:
                 has_key = any(line.startswith('GEMINI_API_KEY=') and len(line.strip()) > 15 for line in f)
         except OSError:
             has_key = False
-        return ({'auth': 'API key'}, None) if has_key else (None, None)
-    email = (load_json(os.path.join(home, 'google_accounts.json')) or {}).get('active')
-    if not email or not os.path.exists(os.path.join(home, 'oauth_creds.json')):
-        return None, None
-    note = 'Kalau muncul IneligibleTierError, pakai API key lewat "Ganti Akun".'
-    return {'email': email, 'auth': 'Akun Google'}, note
+        if has_key:
+            return {'auth': 'API key'}, None
+        return None, 'API key belum diisi, tekan "Ganti Akun".'
+    # Tanpa keyring (root), token login disimpan di file JSON /root/.config/antigravity/.
+    # Hanya nama kuncinya yang dicek; isinya tidak dibaca keluar.
+    folder = '/root/.config/antigravity'
+    try:
+        names = [n for n in os.listdir(folder) if n.endswith('.json')]
+    except OSError:
+        names = []
+    for name in names:
+        data = load_json(os.path.join(folder, name))
+        if not isinstance(data, dict):
+            continue
+        keys = list(data) + [k for v in data.values() if isinstance(v, dict) for k in v]
+        if any('oauth-token' in k for k in keys):
+            return {'auth': 'Akun Google (Antigravity)'}, None
+    return None, None
 
 
 def codex_account():
@@ -130,7 +152,7 @@ def opencode_account():
 
 
 AGENTS = {
-    'gemini': ('gemini', gemini_account),
+    'gemini': ('agy', gemini_account),
     'codex': ('codex', codex_account),
     'opencode': ('opencode', opencode_account),
 }
@@ -142,7 +164,7 @@ def agents_status():
         path = shutil.which(binary, path=ROOT_PATH)
         info = {'installed': bool(path)}
         if path:
-            info['version'] = package_version(path)
+            info['version'] = package_version(path) or binary_version(path)
             try:
                 info['account'], info['note'] = account()
             except Exception as e:  # noqa: BLE001 - jangan sampai satu CLI merusak semuanya
