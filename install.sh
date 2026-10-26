@@ -57,27 +57,48 @@ as_user cp desktop/teman-ngoding.desktop "$TARGET_HOME/.local/share/applications
 as_user cp icons/teman-ngoding.svg "$TARGET_HOME/.local/share/icons/hicolor/scalable/apps/"
 as_user gtk-update-icon-cache -q -t "$TARGET_HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
+# Pasang isi stdin ke tujuan (tanpa /dev/stdin, yang tidak selalu bisa dibaca `install`)
+install_stdin() {
+    local tmp
+    tmp="$(mktemp)"
+    cat > "$tmp"
+    $SUDO install -m "$1" "$tmp" "$2"
+    rm -f "$tmp"
+}
+
 echo "==> File sistem (${SUDO:-root})"
 $SUDO install -m 755 bin/teman-ngoding-launch bin/teman-ngoding-switch bin/teman-ngoding-run /usr/local/bin/
 # Script status & polkit menyebut nama user; sesuaikan dengan user yang memasang
 sed "s|('yandi', '/home/yandi')|('$TARGET_USER', '$TARGET_HOME')|" bin/teman-ngoding-status \
-    | $SUDO install -m 755 /dev/stdin /usr/local/bin/teman-ngoding-status
+    | install_stdin 755 /usr/local/bin/teman-ngoding-status
 $SUDO install -d -m 755 /usr/local/lib/teman-ngoding/bin
 sed "s|:-yandi}|:-$TARGET_USER}|" lib/open-in-user-chrome \
-    | $SUDO install -m 755 /dev/stdin /usr/local/lib/teman-ngoding/open-in-user-chrome
+    | install_stdin 755 /usr/local/lib/teman-ngoding/open-in-user-chrome
 for name in sensible-browser www-browser x-www-browser xdg-open; do
     $SUDO ln -sf ../open-in-user-chrome "/usr/local/lib/teman-ngoding/bin/$name"
 done
 $SUDO install -m 644 systemd/teman-ngoding-status.service systemd/teman-ngoding-status.timer /etc/systemd/system/
 sed "s|subject.user == \"yandi\"|subject.user == \"$TARGET_USER\"|" polkit/49-teman-ngoding-status.rules \
-    | $SUDO install -m 644 /dev/stdin /etc/polkit-1/rules.d/49-teman-ngoding-status.rules
+    | install_stdin 644 /etc/polkit-1/rules.d/49-teman-ngoding-status.rules
 
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable --now teman-ngoding-status.timer
 $SUDO systemctl start teman-ngoding-status.service || true
 
 echo "==> Aktifkan ekstensi"
-as_user gnome-extensions enable "$UUID" 2>/dev/null \
-    || echo "   Logout/login dulu, lalu: gnome-extensions enable $UUID"
+if ! as_user gnome-extensions enable "$UUID" 2>/dev/null; then
+    # GNOME (Wayland) baru mengenali UUID baru setelah logout/login. Kalau UUID lama
+    # masih dikenali sesi ini, jalankan versi baru lewat folder lama sebagai jembatan;
+    # versi asli menghapus jembatan ini sendiri setelah login berikutnya.
+    if as_user gnome-extensions info "$OLD_UUID" >/dev/null 2>&1; then
+        BRIDGE="$TARGET_HOME/.local/share/gnome-shell/extensions/$OLD_UUID"
+        as_user mkdir -p "$BRIDGE"
+        as_user cp extension/"$UUID"/* "$BRIDGE/"
+        as_user gnome-extensions enable "$OLD_UUID"
+        echo "   Maskot jalan lewat jembatan sementara; logout/login kapan saja untuk versi penuh."
+    else
+        echo "   Logout/login dulu, lalu: gnome-extensions enable $UUID"
+    fi
+fi
 
 echo "Selesai! Teman Ngoding siap 🤝"

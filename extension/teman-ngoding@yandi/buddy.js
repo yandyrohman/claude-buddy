@@ -42,6 +42,10 @@ const DEBUG_FILE = GLib.build_filenamev([
 const STATUS_FILE = '/run/teman-ngoding/status.json';
 const STATUS_UNIT = 'teman-ngoding-status.service';
 const UUID = 'teman-ngoding@yandi';
+// Jembatan sementara: sebelum logout/login pertama setelah pasang, GNOME belum
+// mengenali UUID baru, jadi versi baru dijalankan lewat folder UUID lama.
+// Setelah UUID baru dikenali, jembatan ini dimatikan & dihapus (lihat _bridge()).
+const BRIDGE_UUID = 'claude-buddy@yandi';
 const SWITCH_SCRIPT = '/usr/local/bin/teman-ngoding-switch';
 
 const U = 12; // ukuran satu "piksel" maskot
@@ -776,9 +780,35 @@ class SystemInfo {
 export class Buddy {
     constructor(path) {
         this._path = path;
+        this._uuid = GLib.path_get_basename(path);
+    }
+
+    // true kalau maskot boleh dibangun dari ekstensi ini
+    _bridge() {
+        const em = Main.extensionManager;
+        if (this._uuid === BRIDGE_UUID)
+            return !em.lookup(UUID); // UUID baru sudah dikenali: biarkan versi asli yang jalan
+        const dir = GLib.build_filenamev([GLib.path_get_dirname(this._path), BRIDGE_UUID]);
+        if (GLib.file_test(dir, GLib.FileTest.IS_DIR)) {
+            // Versi asli jalan: matikan & hapus jembatan
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                try {
+                    const enabled = global.settings.get_strv('enabled-extensions');
+                    if (enabled.includes(BRIDGE_UUID))
+                        global.settings.set_strv('enabled-extensions', enabled.filter(u => u !== BRIDGE_UUID));
+                    Gio.Subprocess.new(['rm', '-rf', dir], Gio.SubprocessFlags.NONE);
+                } catch (e) {
+                    logError(e, 'teman-ngoding: hapus jembatan');
+                }
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        return true;
     }
 
     enable() {
+        if (!this._bridge())
+            return;
         this._timeouts = new Set();
         this._props = new Set();
         this._state = 'idle'; // idle | hover | drag
@@ -820,6 +850,8 @@ export class Buddy {
     }
 
     disable() {
+        if (!this._timeouts)
+            return; // tidak pernah dibangun (jembatan yang mengalah)
         for (const id of this._timeouts)
             GLib.source_remove(id);
         this._timeouts.clear();
@@ -4133,7 +4165,7 @@ export class Buddy {
                     duration: 600, mode: M.EASE_IN_BACK,
                     onComplete: () => {
                         try {
-                            Main.extensionManager.disableExtension(UUID);
+                            Main.extensionManager.disableExtension(this._uuid);
                         } catch (e) {
                             logError(e, 'teman-ngoding: disable');
                             this._actor?.hide();

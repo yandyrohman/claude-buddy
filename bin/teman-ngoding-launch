@@ -12,6 +12,12 @@ agent="$1"
 if [ -z "$agent" ]; then
     state="$(gnome-extensions info "$UUID" 2>/dev/null | sed -n 's/^ *State: //p')"
     if [ -z "$state" ]; then
+        # Belum logout/login sejak pasang: pakai jembatan lewat UUID lama (lihat install.sh)
+        UUID="claude-buddy@yandi"
+        state="$(gnome-extensions info "$UUID" 2>/dev/null | sed -n 's/^ *State: //p')"
+        [ -d "$HOME/.local/share/gnome-shell/extensions/$UUID" ] || state=""
+    fi
+    if [ -z "$state" ]; then
         # GNOME belum mengenali ekstensinya (baru dipasang, belum logout/login):
         # maskot belum bisa dinyalakan, tapi CLI tetap dibuka
         notify-send -a "Teman Ngoding" -i teman-ngoding "Teman Ngoding" \
