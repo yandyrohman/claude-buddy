@@ -11,11 +11,17 @@ STATE="${XDG_CONFIG_HOME:-$HOME/.config}/teman-ngoding.json"
 agent="$1"
 if [ -z "$agent" ]; then
     state="$(gnome-extensions info "$UUID" 2>/dev/null | sed -n 's/^ *State: //p')"
-    if [ -e "$FLAG" ] || [ "$state" != "ACTIVE" ]; then
+    if [ -z "$state" ]; then
+        # GNOME belum mengenali ekstensinya (baru dipasang, belum logout/login):
+        # maskot belum bisa dinyalakan, tapi CLI tetap dibuka
+        notify-send -a "Teman Ngoding" -i teman-ngoding "Teman Ngoding" \
+            "Logout lalu login sekali supaya maskotnya muncul. Sementara ini CLI-nya dibuka dulu." 2>/dev/null
+    elif [ -e "$FLAG" ] || [ "$state" != "ACTIVE" ]; then
         # kalau masih dalam animasi pamit, matikan dulu lalu nyalakan lagi
         [ "$state" = "ACTIVE" ] && gnome-extensions disable "$UUID"
-        gnome-extensions enable "$UUID"
-        exit 0
+        if gnome-extensions enable "$UUID"; then
+            exit 0
+        fi
     fi
     agent="$(sed -n 's/.*"character" *: *"\([a-z]*\)".*/\1/p' "$STATE" 2>/dev/null)"
 fi
